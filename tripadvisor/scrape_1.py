@@ -61,7 +61,7 @@ def _get_categories(driver, url: str, provincie: str) -> set:
     return _get_data_from_items(items, provincie)
 
 
-def get_data(driver) -> list:
+def get_data1(driver) -> list:
     """Return categorieën lijst."""
     nh = _get_categories(driver, URL_NH, 'Noord-Holland')
     fl = _get_categories(driver, URL_FL, 'Flevoland')

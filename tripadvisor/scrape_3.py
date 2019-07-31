@@ -30,7 +30,7 @@ def extract_nr(line):
     return int(re.sub(r'[^0-9]', '', line))
 
 
-def get_data(link: str, driver):
+def get_data3(link: str, driver):
     """Verwerk alle data van website <link>."""
     driver.get(BASE + link)
 

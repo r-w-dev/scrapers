@@ -1,0 +1,6 @@
+scrapy>=1.7
+pandas>=0.25
+python>=3.7
+sqlalchemy
+selenium
+beautifulsoup4

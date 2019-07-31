@@ -6,7 +6,7 @@ import os
 import scrapy
 from pandas import Timestamp
 
-from booking.items import Hotel
+from ...booking.items import Hotel
 
 checkin_date = Timestamp(2019, 8, 26)
 checkout_date = Timestamp(2019, 8, 31)

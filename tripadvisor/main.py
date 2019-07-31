@@ -13,9 +13,9 @@ from datetime import datetime
 import pandas as pd
 from selenium.webdriver import Chrome, ChromeOptions
 
-import scrape_1
-import scrape_2
-import scrape_3
+from .scrape_1 import get_data1
+from .scrape_2 import get_data2
+from .scrape_3 import get_data3
 
 
 class Browser:
@@ -184,8 +184,8 @@ def _sqlcol(dfparam):
 
 def write_to_db(s1: list, s2: list, s3: set, data: pd.DataFrame) -> None:
     """Write lists with data to database."""
-    from psql import Psql
-    from Bases import Attractie, Activity, Categorie, SCHEMA
+    from .psql import Psql
+    from .Bases import Attractie, Activity, Categorie, SCHEMA
 
     db = Psql(SCHEMA).set_sess_maker().set_engine(echo=False)
     sessie = db.sessie_maker()
@@ -222,7 +222,7 @@ if __name__ == '__main__':
     begin = datetime.now()
 
     with Browser(headless=True) as browser:
-        scrape1 = scrape_1.get_data(browser.driver)
+        scrape1 = get_data1(browser.driver)
         _running_time(begin)
         print(len(scrape1), 'categories')
 
@@ -233,7 +233,7 @@ if __name__ == '__main__':
         for i, link in enumerate(cat_links):
             _print_item(i, cat_links, link)
 
-            scrape2.extend(scrape_2.get_data(link, browser.driver))
+            scrape2.extend(get_data2(link, browser.driver))
 
         _running_time(begin)
         print(len(scrape2), 'activities')
@@ -247,7 +247,7 @@ if __name__ == '__main__':
         for i, link in enumerate(activ_list):
             _print_item(i, activ_list, link)
 
-            scrape3.add(scrape_3.get_data(link, browser.driver))
+            scrape3.add(get_data3(link, browser.driver))
 
             if i % 500 == 0 and i != 0 and i != 1:
                 browser.restart()

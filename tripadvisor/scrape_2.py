@@ -83,7 +83,7 @@ def _get_links(soup: BeautifulSoup, link: str) -> set:
     }
 
 
-def get_data(link: str, driver) -> list:
+def get_data2(link: str, driver) -> list:
     """Return list met attractie links."""
     driver.get(BASE + link)
 
