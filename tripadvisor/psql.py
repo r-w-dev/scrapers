@@ -1,3 +1,11 @@
+"""
+Postgresql class.
+
+@author: Roel de Vries
+@email: rwdevries89@gmail.com
+"""
+
+>>>>>>> 739c57d735a944ebbb586556b8a30c9dad54c788
 from sqlalchemy import (Column, Float, Integer, MetaData, Table, Text,
                         create_engine)
 from sqlalchemy.ext.declarative import declarative_base
