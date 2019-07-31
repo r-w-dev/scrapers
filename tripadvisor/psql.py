@@ -1,19 +1,12 @@
-"""
-Postgresql class.
-
-@author: Roel de Vries
-@email: roel.de.vries@amsterdam.nl
-"""
-
 from sqlalchemy import (Column, Float, Integer, MetaData, Table, Text,
                         create_engine)
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 DIALECT = 'postgresql'
-USER = 'vries274'
-PW = 'welkomroel'
-ADDRESS = 'db.toerisme.vao.amsterdam'
+USER = ''
+PW = ''
+ADDRESS = ''
 PORT = '5432'
 DB = 'toerisme'
 
@@ -109,8 +102,7 @@ class Psql:
         else:
             return Text
 
-    def create_empty_table_from_data(self, df, schema, table,
-                                     drop: bool = False):
+    def create_empty_table_from_data(self, df, schema, table, drop: bool = False):
         columns = [self._replace_bad_chars(c) for c in df.columns]
         sql_dtypes = [self._sql_type(t) for t in df.dtypes]
         cols = [Column(name, sql_dtype)

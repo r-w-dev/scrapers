@@ -104,8 +104,7 @@ def create_dataframe(s1: list, s2: list, s3: set) -> pd.DataFrame:
     data = data.merge(df1, how='left', on='cat_url')
 
     data.drop(
-        columns=[c for c in data.columns if c.endswith('_y')] +
-        ['status', 'cat_url'],
+        columns=[c for c in data.columns if c.endswith('_y')] + ['status', 'cat_url'],
         inplace=True)
     data.rename(
         columns={c: c.rstrip('_x') for c in data.columns if c.endswith('_x')},
@@ -123,8 +122,7 @@ def write_to_csv(data: pd.DataFrame):
     try:
         os.makedirs('results', exist_ok=True)
         time = _datetime_now()
-        data.to_csv('results/attracties {0}.csv'.format(time), sep=';',
-                    index=False)
+        data.to_csv('results/attracties {0}.csv'.format(time), sep=';', index=False)
     except Exception as e:
         print(e.__class__)
         print('writing csv failed...')
@@ -137,9 +135,8 @@ def pivot_categories(data: pd.DataFrame) -> pd.DataFrame:
 
     data = pd.get_dummies(data, columns=['categorie'])
 
-    max_cols = [m for m in data.columns
-                if m.startswith(('categorie_', 'percentage_')) or
-                m == 'added' or m == 'aantal_reviews']
+    max_cols = [m for m in data.columns if m.startswith(
+        ('categorie_', 'percentage_')) or m == 'added' or m == 'aantal_reviews']
 
     rest_cols = [c for c in data.columns if c not in max_cols]
 
@@ -179,7 +176,7 @@ def _sqlcol(dfparam):
             dtypedict.update({c: Numeric()})
         if 'int' in str(d):
             dtypedict.update({c: Integer()})
-        if c in ('lat', 'lon', 'beoordeling'):
+        if c == 'lat' or c == 'lon' or c == 'beoordeling':
             dtypedict.update({c: Numeric()})
 
     return dtypedict
@@ -242,8 +239,7 @@ if __name__ == '__main__':
         print(len(scrape2), 'activities')
 
     activ_list = _get_links_from_list(scrape2, 1)
-    activ_list = [link for link in activ_list
-                  if link.startswith('/Attraction_Review')]
+    activ_list = [link for link in activ_list if link.startswith('/Attraction_Review')]
 
     scrape3 = set()
 
@@ -255,7 +251,7 @@ if __name__ == '__main__':
 
             if i % 500 == 0 and i != 0 and i != 1:
                 browser.restart()
-
+            
             if i % 50 == 0 and i != 0 and i != 1:
                 from time import sleep
                 sleep(60)
