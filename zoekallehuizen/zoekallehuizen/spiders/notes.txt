@@ -1,0 +1,36 @@
+response.xpath('//div[@class="main-features"]//h1//ins[@class="street"]//text()').extract()
+scrapy rules: https://blog.scrapinghub.com/2017/07/07/scraping-the-steam-game-store-with-scrapy
+https://www.zah.nl/te-koop/?minPrice=270000&maxPrice=275000&page=1
+
+scrapy dump:
+{'downloader/request_bytes': 23383812,
+ 'downloader/request_count': 47372,
+ 'downloader/request_method_count/GET': 47372,
+ 'downloader/response_bytes': 543153036,
+ 'downloader/response_count': 47372,
+ 'downloader/response_status_count/200': 43054,
+ 'downloader/response_status_count/301': 3451,
+ 'downloader/response_status_count/404': 2,
+ 'downloader/response_status_count/405': 863,
+ 'downloader/response_status_count/502': 2,
+ 'dupefilter/filtered': 85440,
+ 'finish_reason': 'finished',
+ 'finish_time': datetime.datetime(2018, 7, 9, 20, 47, 43, 709604),
+ 'httperror/response_ignored_count': 864,
+ 'httperror/response_ignored_status_count/404': 1,
+ 'httperror/response_ignored_status_count/405': 863,
+ 'item_scraped_count': 39811,
+ 'log_count/DEBUG': 87186,
+ 'log_count/INFO': 914,
+ 'offsite/domains': 1,
+ 'offsite/filtered': 62545,
+ 'request_depth_max': 83,
+ 'response_received_count': 43919,
+ 'retry/count': 2,
+ 'retry/reason_count/502 Bad Gateway': 2,
+ 'scheduler/dequeued': 47370,
+ 'scheduler/dequeued/memory': 47370,
+ 'scheduler/enqueued': 47370,
+ 'scheduler/enqueued/memory': 47370,
+ 'start_time': datetime.datetime(2018, 7, 9, 20, 5, 10, 319012)}
+2018-07-09 22:47:43 [scrapy.core.engine] INFO: Spider closed (finished)
