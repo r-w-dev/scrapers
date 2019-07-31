@@ -2,7 +2,7 @@
 Postgresql class.
 
 @author: Roel de Vries
-@email: roel.de.vries@amsterdam.nl
+@email: rwdevries89@gmail.com
 """
 
 from sqlalchemy import (Column, Float, Integer, MetaData, Table, Text,
@@ -11,9 +11,9 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 DIALECT = 'postgresql'
-USER = 'vries274'
-PW = 'welkomroel'
-ADDRESS = 'db.toerisme.vao.amsterdam'
+USER = ''
+PW = ''
+ADDRESS = ''
 PORT = '5432'
 DB = 'toerisme'
 
