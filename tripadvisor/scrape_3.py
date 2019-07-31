@@ -1,93 +1,116 @@
-from bs4 import BeautifulSoup
 import re
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as ec
-from selenium.webdriver.common.by import By
-from selenium.common.exceptions import TimeoutException
+from decimal import Decimal
 from urllib.parse import parse_qs
 
+from bs4 import BeautifulSoup
+from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as ec
+from selenium.webdriver.support.ui import WebDriverWait
 
-BASE = "https://www.tripadvisor.nl"
+BASE = 'https://www.tripadvisor.com'
 
 
-def wait_for(driver, elem):
+def wait_for(driver, xpath_elem):
+    """Wait for element to appear on website."""
     try:
-        element_present = ec.presence_of_element_located((By.XPATH, elem))
-        WebDriverWait(driver, 7).until(element_present)
+        element_present = ec.presence_of_element_located((By.XPATH, xpath_elem))
+        WebDriverWait(driver, 5).until(element_present)
     except TimeoutException:
-        print("Timed out waiting for page to load")
+        print('WARNING: Timed out waiting for page to load')
 
 
 def extract_phonenr(line):
-    return re.sub(r"[^+0-9]", "", line)
+    """Extract telefoonnummer uit string."""
+    return re.sub(r'[^+0-9]', '', line)
 
 
 def extract_nr(line):
-    return int(re.sub(r"[^0-9]", "", line))
+    """Extract alle cijfers uit een string."""
+    return int(re.sub(r'[^0-9]', '', line))
 
 
 def get_data(link: str, driver):
-
+    """Verwerk alle data van website <link>."""
     driver.get(BASE + link)
 
     wait_for(driver, "//img[@class='mapImg']")
 
-    soup = BeautifulSoup(driver.page_source, features="lxml")
+    soup = BeautifulSoup(driver.page_source, features='lxml')
 
-    ta_id = soup.find("div", {"class": "blRow"})
-    ta_id = ta_id["data-locid"] if "data-locid" in ta_id else 0
+    title = soup.find('h1', {'class': 'ui_header h1'})
+    title = title.text if title is not None else ''
 
-    rating = soup.find("div", {"class": "section rating"})
-    rating = rating.find('a')['alt'] if rating is not None else ""
+    ta_id = re.search(r'^/[\w]+-g([0-9]+)-d([0-9]+)', link, re.IGNORECASE)
+    ta_id = int(ta_id.group(2)) if ta_id is not None else 0
 
-    adres_str = soup.find("span", {"class": "street-address"})
-    adres_str = adres_str.text.strip(",") if adres_str is not None else ""
+    rating = soup.find('div', {'class': 'section rating'})
+    rating = Decimal(re.search(r'[0-9.]{1,3}', rating.find('a')['alt']).group(0)) \
+        if rating is not None else -1
 
-    adres_local = soup.find("span", {"class": "locality"})
-    adres_local = adres_local.text.strip(",") if adres_local is not None else ""
+    adres_str = soup.find('span', {'class': 'street-address'})
+    adres_str = adres_str.text.strip(',').strip() if adres_str is not None else ''
 
-    adres_country = soup.find("span", {"class": "country-name"})
-    adres_country = adres_country.text if adres_country is not None else ""
+    adres_local = soup.find('span', {'class': 'locality'})
+    adres_local = adres_local.text.strip(',').replace(',', '').strip() \
+        if adres_local is not None else ''
 
-    aantal_reviews = soup.find("a", {"class": "seeAllReviews"})
-    aantal_reviews = aantal_reviews.text if aantal_reviews is not None else -100
+    pcode = re.match(r'[0-9]{4} [A-Z]{2}|[0-9]{4}', adres_local)
+    pcode = pcode[0].strip() if pcode is not None else ''
+
+    plaats = re.sub(r'[0-9|A-Z{1}]+[A-Z|0-9]{3}[ ]|[A-Z]{2} ', '', adres_local).strip()
+    plaats = '' if len(plaats) <= 2 else plaats
+
+    adres_country = soup.find('span', {'class': 'country-name'})
+    adres_country = adres_country.text.strip(',').strip() \
+        if adres_country is not None else ''
+
+    aantal_reviews = soup.find('a', {'class': 'seeAllReviews'})
+    aantal_reviews = extract_nr(aantal_reviews.text) \
+        if aantal_reviews is not None else -100
 
     reviews = soup.find('div', {'class': 'section histogram'})
-    reviews = reviews.findall(
-        "span", {"class": "row_count row_cell"}
+    reviews = reviews.find_all(
+        'span', {'class': 'row_count row_cell'}
     ) if reviews is not None else []
 
     if reviews:
         if len(reviews) == 5:
-            reviews = [r.text for r in reviews]
+            reviews = [extract_nr(r.text) for r in reviews]
         else:
             reviews = [-1, -1, -1, -1, -1]
     else:
         reviews = [-1, -1, -1, -1, -1]
 
-    phonenr = soup.find("div", {"class": "detail_section phone"})
-    phonenr = phonenr.text if phonenr is not None else ""
+    phonenr = soup.find('div', {'class': 'detail_section phone'})
+    phonenr = extract_phonenr(phonenr.text) if phonenr is not None else ''
 
-    coords = parse_qs(soup.find('img', {'class': 'mapImg'})['src'])
-    coords = coords['center'][0].split(',') if 'center' in coords else 0
+    coords = soup.find('img', {'class': 'mapImg'})
+    if coords is not None:
+        coords = parse_qs(coords['src'])
+        coords = coords['center'][0].split(',') if 'center' in coords else [0, 0]
+        coords = [Decimal(c) for c in coords]
+    else:
+        coords = [0, 0]
 
     return (
-        (
-            "NEW",
-            link,
-            int(ta_id),
-            rating.strip() if rating != "" else -1,
-            adres_str.strip(),
-            adres_local.replace(",", "").strip(),
-            adres_country.strip(',').strip(),
-            extract_nr(aantal_reviews),
-            extract_nr(reviews[0]),
-            extract_nr(reviews[1]),
-            extract_nr(reviews[2]),
-            extract_nr(reviews[3]),
-            extract_nr(reviews[4]),
-            extract_phonenr(phonenr),
-            float(coords[0]),
-            float(coords[1]),
-        )
+        'NEW',
+        title,
+        link,
+        ta_id,
+        rating,
+        adres_str,
+        adres_local,
+        pcode,
+        plaats,
+        adres_country,
+        aantal_reviews,
+        reviews[0],
+        reviews[1],
+        reviews[2],
+        reviews[3],
+        reviews[4],
+        phonenr,
+        coords[0],
+        coords[1],
     )
