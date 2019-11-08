@@ -7,11 +7,12 @@ import logging
 class Meesterbaan(scrapy.Spider):
 
     name = 'meesterbaan'
-    output_file = 'output_{0}.csv'.format(dt.now().strftime('%Y%m%d %H%M'))
+    now = dt.now().strftime("%Y%m%d_%H%M")
+    output_file = f'output_{now}.json'
     custom_settings = {
         'FEED_URI': output_file,
         'FEED_EXPORT_ENCODING': 'windows-1252',
-        'FEED_FORMAT': 'csv',
+        'FEED_FORMAT': 'json',
         'LOG_LEVEL': logging.INFO
     }
 
@@ -63,7 +64,7 @@ class Meesterbaan(scrapy.Spider):
             ).get(),
 
             naam_school=response.xpath(
-                "//span[contains(@id, 'ctl00_plhControl_lblSchool')]/text()"
+                "//a[contains(@id, 'ctl00_plhControl_lblSchool')]/text()"
             ).get(),
 
             plaats=response.xpath(
@@ -101,4 +102,8 @@ class Meesterbaan(scrapy.Spider):
             plaatsings_datum=response.xpath(
                 "//span[contains(@id, 'ctl00_plhControl_lblPlaatsing2')]/text()"
             ).get(),
+            
+            website=response.xpath(
+                "//a[contains(@id, 'ctl00_plhControl_hplWebsite')]/text()"
+            ).get()
         )
