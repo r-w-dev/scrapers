@@ -120,7 +120,8 @@ ow_instellingen = ow_instellingen[['NAAM_VOLLEDIG', 'NAAM_KORT', 'adres', 'plaat
 file = "MRA scholen Meesterbaan-scrape.csv"
 ow_instellingenMRA = pd.read_csv(dir + file, delimiter=';', encoding="ISO-8859-1")
 
-# ow_instellingenMRA = pd.read_csv("C:/Users/Datalab/Documents/Scrapen Onderwijs/MRA scholen Meesterbaan-scrape.csv", delimiter=';', encoding = "ISO-8859-1") #hier zitten alle scholen in buiten amsterdam (ook Assen bijv), maar op zich geen probleem. Kan eventueel nog selectie MRA-plaatsen.
+# ow_instellingenMRA = pd.read_csv("C:/Users/Datalab/Documents/Scrapen Onderwijs/MRA scholen Meesterbaan-scrape.csv", delimiter=';', encoding = "ISO-8859-1") 
+#hier zitten alle scholen in buiten amsterdam (ook Assen bijv), maar op zich geen probleem. Kan eventueel nog selectie MRA-plaatsen.
 ow_instellingenMRA['adres'] = ow_instellingenMRA["STRAATNAAM"] + " " + \
                               ow_instellingenMRA["HUISNUMMER-TOEVOEGING"]
 ow_instellingenMRA.rename(index=str, columns={"VESTIGINGSNUMMER": "BRIN_NUMMER",
@@ -136,7 +137,8 @@ ow_instellingenMRA = pd.DataFrame(ow_instellingenMRA)
 frames = [ow_instellingen, ow_instellingenMRA]
 ow_instellingen = pd.concat(frames)
 ow_instellingen.loc[(ow_instellingen['plaats'] == "Amsterdam"), 'plaats'] = "Amsterdam"
-# ow_instellingen.loc[(ow_instellingen['plaats'] == "Amsterdam"), 'plaats'] = "AMSTERDAM" #nu is alles in kapitalen, nodig voor match met mra plaatsen.
+# ow_instellingen.loc[(ow_instellingen['plaats'] == "Amsterdam"), 'plaats'] = "AMSTERDAM"
+#nu is alles in kapitalen, nodig voor match met mra plaatsen.
 
 # mra["Woonplaatsen"] = mra["Woonplaatsen"].str.upper()
 mra["Woonplaatsen"] = mra.Woonplaatsen.str.title()

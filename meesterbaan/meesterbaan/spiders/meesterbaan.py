@@ -1,7 +1,21 @@
-import scrapy
-from meesterbaan.items import Vacature
-from datetime import datetime as dt
 import logging
+from datetime import datetime as dt
+
+import scrapy
+
+from meesterbaan.items import Vacature, VacatureLoader
+
+
+def _xpath(
+        field: str,
+        field_class: str = 'id',
+        tag: str = 'span',
+        href: bool = False,
+        norm: bool = True
+) -> str:
+    text_href = '@href' if href else 'text()'
+    base = f"//{tag}[contains(@{field_class}, '{field}')]/{text_href}"
+    return f'normalize-space({base})' if norm else base
 
 
 class Meesterbaan(scrapy.Spider):
@@ -16,8 +30,7 @@ class Meesterbaan(scrapy.Spider):
         'LOG_LEVEL': logging.INFO
     }
 
-    base_url = 'https://www.meesterbaan.nl/onderwijs/vacatures.aspx' \
-               '?id_sector=-1&id_regio=-1&id_functie=-1'
+    base_url = 'https://www.meesterbaan.nl/onderwijs/vacatures.aspx?id_sector=-1&id_regio=-1&id_functie=-1'
 
     sets_five = 0
     current_page_counter = 0
@@ -26,7 +39,6 @@ class Meesterbaan(scrapy.Spider):
         yield scrapy.FormRequest(self.base_url, callback=self._parse_search)
 
     def _parse_search(self, response):
-
         links = response.xpath("//a[contains(@id, 'hplLeesMeer')]/@href").getall()
         for link in links:
             yield scrapy.Request(link, callback=self.parse)
@@ -58,52 +70,19 @@ class Meesterbaan(scrapy.Spider):
             )
 
     def parse(self, response):
-        yield Vacature(
-            naam_vacature=response.xpath(
-                "//span[contains(@id, 'ctl00_plhControl_lblTitel')]/text()"
-            ).get(),
+        vac = VacatureLoader(item=Vacature(), response=response)
 
-            naam_school=response.xpath(
-                "//a[contains(@id, 'ctl00_plhControl_lblSchool')]/text()"
-            ).get(),
+        vac.add_xpath('naam_vacature', _xpath('ctl00_plhControl_lblTitel'))
+        vac.add_xpath('naam_school', _xpath('ctl00_plhControl_lblSchool', tag='a'))
+        vac.add_xpath('plaats', _xpath('ctl00_plhControl_lblPlaats'))
+        vac.add_xpath('sector', _xpath('ctl00_plhControl_lblSector'))
+        vac.add_xpath('denominatie', _xpath('ctl00_plhControl_lblDenominatie'))
+        vac.add_xpath('dienstverband', _xpath('ctl00_plhControl_lblDienstverband'))
+        vac.add_xpath('functie_titel', _xpath('ctl00_plhControl_lblFunctie'))
+        vac.add_xpath('fte', _xpath('ctl00_plhControl_lblWTF'))
+        vac.add_xpath('opleiding', _xpath('ctl00_plhControl_txtBevoegdheden'))
+        vac.add_xpath('salaris_schaal', _xpath('ctl00_plhControl_lblSalarisSchalen'))
+        vac.add_xpath('plaatsings_datum', _xpath('ctl00_plhControl_lblPlaatsing2'))
+        vac.add_xpath('website', _xpath('ctl00_plhControl_hplWebsite', tag='a'))
 
-            plaats=response.xpath(
-                "//span[contains(@id, 'ctl00_plhControl_lblPlaats')]/text()"
-            ).get(),
-
-            sector=response.xpath(
-                "//span[contains(@id, 'ctl00_plhControl_lblSector')]/text()"
-            ).get(),
-
-            denominatie=response.xpath(
-                "//span[contains(@id, 'ctl00_plhControl_lblDenominatie')]/text()"
-            ).get(),
-
-            dienstverband=response.xpath(
-                "//span[contains(@id, 'ctl00_plhControl_lblDienstverband')]/text()"
-            ).get(),
-
-            functie_titel=response.xpath(
-                "//span[contains(@id, 'ctl00_plhControl_lblFunctie')]/text()"
-            ).get(),
-
-            fte=response.xpath(
-                "//span[contains(@id, 'ctl00_plhControl_lblWTF')]/text()"
-            ).get(),
-
-            opleiding=response.xpath(
-                "//span[contains(@id, 'ctl00_plhControl_txtBevoegdheden')]/text()"
-            ).get(),
-
-            salaris_schaal=response.xpath(
-                "//span[contains(@id, 'ctl00_plhControl_lblSalarisSchalen')]/text()"
-            ).get(),
-
-            plaatsings_datum=response.xpath(
-                "//span[contains(@id, 'ctl00_plhControl_lblPlaatsing2')]/text()"
-            ).get(),
-            
-            website=response.xpath(
-                "//a[contains(@id, 'ctl00_plhControl_hplWebsite')]/text()"
-            ).get()
-        )
+        yield vac.load_item()

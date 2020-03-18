@@ -14,7 +14,6 @@ BOT_NAME = 'meesterbaan'
 SPIDER_MODULES = ['meesterbaan.spiders']
 NEWSPIDER_MODULE = 'meesterbaan.spiders'
 
-
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) " \
              "Chrome/50.0.2661.75 Safari/537.36"
@@ -59,9 +58,10 @@ ROBOTSTXT_OBEY = True
 
 # Enable or disable extensions
 # See https://docs.scrapy.org/en/latest/topics/extensions.html
-# EXTENSIONS = {
-#    'scrapy.extensions.telnet.TelnetConsole': None,
-# }
+EXTENSIONS = {
+    'scrapy.extensions.telnet.TelnetConsole': None,
+    # 'scrapy.extensions.closespider.CloseSpider': 25
+}
 
 # Configure item pipelines
 # See https://docs.scrapy.org/en/latest/topics/item-pipeline.html
