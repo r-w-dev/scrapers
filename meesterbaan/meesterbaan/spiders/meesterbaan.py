@@ -24,10 +24,27 @@ class Meesterbaan(scrapy.Spider):
     now = dt.now().strftime("%Y%m%d_%H%M")
     output_file = f'output_{now}.json'
     custom_settings = {
+        'LOG_LEVEL': logging.INFO,
         'FEED_URI': output_file,
         'FEED_EXPORT_ENCODING': 'windows-1252',
         'FEED_FORMAT': 'json',
-        'LOG_LEVEL': logging.INFO
+        'FEED_STORE_EMPTY': True,
+        'FEED_EXPORT_FIELDS': [
+            'naam_vacature',
+            'naam_school',
+            'plaats',
+            'sector',
+            'denominatie',
+            'dienstverband',
+            'functie_titel',
+            'fte',
+            'opleiding',
+            'salaris_schaal',
+            'plaatsings_datum',
+            'website',
+            'adres',
+            'postcode6',
+        ]
     }
 
     base_url = 'https://www.meesterbaan.nl/onderwijs/vacatures.aspx?id_sector=-1&id_regio=-1&id_functie=-1'
@@ -84,5 +101,7 @@ class Meesterbaan(scrapy.Spider):
         vac.add_xpath('salaris_schaal', _xpath('ctl00_plhControl_lblSalarisSchalen'))
         vac.add_xpath('plaatsings_datum', _xpath('ctl00_plhControl_lblPlaatsing2'))
         vac.add_xpath('website', _xpath('ctl00_plhControl_hplWebsite', tag='a'))
+        vac.add_xpath('adres', _xpath('ctl00_plhControl_lblStraatnaam', tag='span'))
+        vac.add_xpath('postcode6', _xpath('ctl00_plhControl_lblPostalcode', tag='span'))
 
         yield vac.load_item()

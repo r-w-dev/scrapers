@@ -33,3 +33,5 @@ class Vacature(scrapy.Item):
     salaris_schaal = scrapy.Field()
     plaatsings_datum = scrapy.Field()
     website = scrapy.Field()
+    adres = scrapy.Field()
+    postcode6 = scrapy.Field()
