@@ -7,7 +7,6 @@ from urllib.parse import quote
 import pandas as pd
 import requests
 import urllib3
-from shapely.geometry import Point
 
 urllib3.disable_warnings()
 pd.set_option('max_colwidth', 150)
@@ -21,7 +20,11 @@ pickle_folder = work_dir / 'output' / 'pickle'
 def get_json_from_url(url, results_key: str = None, encoding: str = 'utf-8'):
     with requests.get(url, verify=False) as resp:
         if resp.status_code != 200:
-            resp.raise_for_status()
+            if resp.status_code == 500:
+                print(f'HTTP error: 500 Server Error {url}')
+                return None
+            else:
+                resp.raise_for_status()
 
         resp.encoding = encoding
         result = resp.json()
@@ -30,6 +33,18 @@ def get_json_from_url(url, results_key: str = None, encoding: str = 'utf-8'):
         raise KeyError(f'"{results_key}" key not in result')
     else:
         return result[results_key]
+
+
+def split_brin(brin6: str) -> tuple:
+    return str(brin6[:4].upper()), str(brin6[4:].upper())
+
+
+def make_brin6(brin4, vnr) -> str:
+    vnr = str(vnr)
+    if len(vnr) == 1:
+        vnr = f'0{vnr}'
+
+    return f'{brin4.upper()}{vnr}'
 
 
 class Verwerken:
@@ -353,91 +368,137 @@ class Verwerken:
         return self
 
 
+def validate_naam(naam):
+    return str(naam).strip()
+
+
+def validate_brin4(brin4, error):
+    if brin4:
+        brin4 = str(brin4).strip()
+
+        if len(brin4) != 4 or not brin4[:2].isdigit() or not brin4[-2:].isalpha():
+            if error == 'raise':
+                raise ValueError(f'brin4 fout: {brin4}')
+            else:
+                return None
+    return brin4
+
+
+def validate_brin6(brin6, error):
+    if brin6:
+        brin6 = str(brin6).strip()
+        brin6 = make_brin6(brin6[:4], brin6[5:])
+
+        if len(brin6) != 6 or not brin6[:2].isdigit() or not brin6[2:4].isalpha() or not brin6[-2:].isdigit():
+            if error == 'raise':
+                raise ValueError(f'brin6 fout: {brin6}')
+            else:
+                return None
+    return brin6
+
+
 class Schoolwijzer:
 
-    base_url = 'https://schoolwijzer.amsterdam.nl/nl/api/v1/lijst/'
-    zoek_url = '/zoek/'
-    duo_url = '/duo_compatible/1'
+    url_base = 'https://schoolwijzer.amsterdam.nl/nl/api/v1'
+    url_lijst = 'lijst'
+    url_detail = 'detail'
+    url_brin4 = 'brin'
+    url_brin6 = 'vestigingsnummer'
+    url_zoek = 'zoek'
+    url_duo = 'duo_compatible/1'
     ENCODING = 'windows-1252'
+
+    def _built_url(self, naam, brin4, brin6, soort_ow) -> str:
+        if brin6:
+            br1, br2 = split_brin(brin6)
+            br2 = br2[-1] if len(br2) == 2 else br2
+            return f'{self.url_base}/{self.url_detail}/{soort_ow}/{self.url_brin4}/{br1}/{self.url_brin6}/{br2}'
+
+        elif brin4:
+            br1, _ = split_brin(brin4)
+            return f'{self.url_base}/{self.url_detail}/{soort_ow}/{self.url_brin4}/{br1}'
+
+        elif naam:
+            res = f'{self.url_base}/{self.url_lijst}/{soort_ow}/{self.url_zoek}/{quote(naam)}'
+            return res + f'/{self.url_duo}' if soort_ow != 'so' else res
+        else:
+            raise ValueError('Geef minimaal 1 paramater op.')
+
+    def find_schools(self, namen=None, brins4=None, brins6=None, **kwargs):
+        if brins6:
+            return [self.find_school(brin6=br, **kwargs) for br in brins6]
+        if brins4:
+            return [self.find_school(brin4=br, **kwargs) for br in brins4]
+        if namen:
+            return [self.find_school(naam=br, **kwargs) for br in namen]
 
     def find_school(
             self,
-            naam: str,
+            naam: str = None,
+            brin4: str = None,
+            brin6: str = None,
             soorten_onderwijs: list = ('po', 'vo', 'so'),
             copy=False,
-            all_fields: bool = True,
-            transpose: bool = True
+            fields: list = None,
+            transpose: bool = True,
+            error: str = 'raise'
     ):
-        print(f'zoekterm: {naam}')
+        zoekterm = brin6 or brin4 or naam
+        print(f'zoekterm: "{zoekterm}" | ', end='')
+        if not zoekterm:
+            return pd.NA
 
-        for soort_ow in soorten_onderwijs:
-            url = f'{self.base_url}{soort_ow}{self.zoek_url}{quote(naam)}'
+        naam = validate_naam(naam)
+        brin4 = validate_brin4(brin4, error=error)
+        brin6 = validate_brin6(brin6, error=error)
 
-            if soort_ow != 'so':
-                url += self.duo_url
+        urls = {ow: self._built_url(naam, brin4, brin6, ow) for ow in soorten_onderwijs}
 
+        for soort_ow, url in urls.items():
             result = get_json_from_url(url, results_key='results', encoding=self.ENCODING)
 
             # case 0 results
             if not result:
-                print(f'{soort_ow}: geen resultaten')
+                print(f'{soort_ow}: geen resultaten |', end=' ')
                 continue
+
+            print(f"Aantal resultaten: {len(result)} \t\t({url})")
 
             # case 1 result
             if len(result) == 1:
                 first = result[0]
-                print(f"'{first['naam']}' gevonden ({soort_ow})")
+                # print(f"'{first['naam']}' gevonden ({soort_ow})")
 
-                return self.prepare_result(result=first, copy=copy, all_fields=all_fields, transpose=transpose)
+                return self.prepare_result(result=first, copy=copy, fields=fields, transpose=transpose)
 
             # case > 1 result
             else:
                 print('meerdere resultaten: ')
 
                 for i, res in enumerate(result):
-                    print(f"{i}: {res['naam']}      ({res['adres']['adres']}, {soort_ow})")
+                    print(f"{i}: {make_brin6(res['brin'], res['vestigingsnummer'])}\t{res['naam']}      "
+                          f"({res['adres']['adres']}, {soort_ow})")
 
                 numr = int(input('return resultaat nr: '))
-                return self.prepare_result(result=result[numr], copy=copy, all_fields=all_fields, transpose=transpose)
+                return self.prepare_result(result=result[numr], copy=copy, fields=fields, transpose=transpose)
+        else:
+            print("Geen match gevonden.")
+            return pd.NA
 
-    def prepare_result(self, result, copy: bool = False, all_fields: bool = True, transpose: bool = False):
-        if all_fields:
-            all_ = pd.json_normalize(result)
+    @staticmethod
+    def prepare_result(result, copy: bool = False, fields: list = None, transpose: bool = False):
+        all_ = pd.json_normalize(result)
+        all_ = all_.rename(columns={c: c.replace('adres.', '').replace('coordinaten.', '') for c in all_.columns})
+
+        if fields is None:
             return all_.T if transpose else all_
 
         else:
-            data = [
-                result['brin'],
-                self.brin6(result['brin'], result['vestigingsnummer']),
-                result['naam'],
-                result['adres']['plaats'].upper(),
-                result['adres']['adres'],
-                Point(result['coordinaten']['lat'], result['coordinaten']['lng'])
-            ]
-            idx = ['BRIN', 'BRIN6', 'NAAM_VOLLEDIG', 'PLAATS', 'ADRES', 'LOCATIE']
-            res = pd.DataFrame(data, index=idx)
-
             if copy:
                 print(' --- COPIED --- ')
-                res.T.to_clipboard(index=False, header=False)
+                all_.T.to_clipboard(index=False, header=False)
             else:
-                return res
-
-    @staticmethod
-    def brin6(brin4: str, vestnr):
-        vestnr = str(vestnr)
-        if len(vestnr) == 6:
-            return vestnr
-
-        if len(brin4) == 4 and brin4.isalnum():
-            if len(vestnr) == 2:
-                return f'{brin4}{vestnr}'.upper()
-            elif len(vestnr) == 1:
-                return f'{brin4}0{vestnr}'.upper()
-            else:
-                raise ValueError(f'{vestnr} foute lengte')
-        else:
-            raise ValueError(f'brin4 fout ({brin4}')
+                return all_[fields].squeeze()
 
 
 class Duo:
@@ -575,7 +636,6 @@ class Duo:
             if brin6:
                 if not gezag and not mbo:
                     url_query = f'"VESTIGINGSNUMMER": "{brin6}"'
-
 
             if url_query:
                 urls[soort_ow] = f'{self.BASE_URL}{res_id}&q={{{url_query}}}'
