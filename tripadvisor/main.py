@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 """
 Main running class.
 
@@ -11,58 +8,10 @@ import os
 from datetime import datetime
 
 import pandas as pd
-from selenium.webdriver import Chrome, ChromeOptions
 
-from .scrape_1 import get_data1
-from .scrape_2 import get_data2
-from .scrape_3 import get_data3
-
-
-class Browser:
-    """Class controlling the browser instance."""
-
-    headless = False
-
-    if os.name == 'nt':
-        CHR_PATH = os.getcwd() + '//scripts//driver//chromedriver.exe'
-    else:
-        CHR_PATH = 'chromedriver/chromedriver'
-
-    def _init_chrome(self, headless: bool = True) -> Chrome:
-        chr_opt = ChromeOptions()
-        chr_opt.headless = headless
-        chr_opt.add_argument('log-level=2')
-        chr_opt.add_argument('--disable-logging')
-        chr_opt.add_argument('--disable-remote-fonts')
-        chr_opt.add_argument('--incognito')
-
-        if 'posix' in os.name:
-            chr_opt.binary_location = 'chrome/chrome'
-        chrome = Chrome(executable_path=self.CHR_PATH, options=chr_opt)
-        chrome.set_window_size(1920, 1080)
-        return chrome
-
-    def __init__(self, headless=True):
-        """Initialize browser."""
-        self.headless = headless
-
-    def __enter__(self):
-        """Initialize driver."""
-        self.driver = self._init_chrome(self.headless)
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Close and quit browser instance."""
-        self.driver.close()
-        self.driver.quit()
-        print('Browser closed...')
-
-    def restart(self):
-        """Restart webdriver."""
-        self.driver.close()
-        print('Restarting browser...')
-        self.__enter__()
-        return self
+from scrape_1 import get_data1
+from scrape_2 import get_data2
+from scrape_3 import get_data3
 
 
 def _datetime_now() -> str:
@@ -150,8 +99,8 @@ def pivot_categories(data: pd.DataFrame) -> pd.DataFrame:
     return data
 
 
-def _get_links_from_list(scrape_list: list, idx: int) -> list:
-    return list({s[idx] for s in scrape_list})
+def _get_unique_links_from_list(scrape_list: list, link_idx: int) -> list:
+    return list({s[link_idx] for s in scrape_list})
 
 
 def _running_time(start):
@@ -226,7 +175,7 @@ if __name__ == '__main__':
         _running_time(begin)
         print(len(scrape1), 'categories')
 
-    cat_links = _get_links_from_list(scrape1, 1)
+    cat_links = _get_unique_links_from_list(scrape1, 1)
     scrape2 = []
 
     with Browser(headless=True) as browser:
@@ -238,7 +187,7 @@ if __name__ == '__main__':
         _running_time(begin)
         print(len(scrape2), 'activities')
 
-    activ_list = _get_links_from_list(scrape2, 1)
+    activ_list = _get_unique_links_from_list(scrape2, 1)
     activ_list = [link for link in activ_list if link.startswith('/Attraction_Review')]
 
     scrape3 = set()
@@ -251,7 +200,7 @@ if __name__ == '__main__':
 
             if i % 500 == 0 and i != 0 and i != 1:
                 browser.restart()
-            
+
             if i % 50 == 0 and i != 0 and i != 1:
                 from time import sleep
                 sleep(60)
@@ -262,8 +211,9 @@ if __name__ == '__main__':
     df = create_dataframe(scrape1, scrape2, scrape3)
     df = pivot_categories(df)
 
+    df.to_pickle('result.pickle')
     write_to_csv(df)
 
-    write_to_db(scrape1, scrape2, scrape3, df)
+    # write_to_db(scrape1, scrape2, scrape3, df)
 
     _running_time(begin)
