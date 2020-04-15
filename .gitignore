@@ -8,7 +8,9 @@ __pycache__/
 *.json
 *.pickle
 *.txt
-
+chrome-data
+**/chrome-data
+**/driver
 
 # C extensions
 *.so
