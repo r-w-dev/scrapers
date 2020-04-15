@@ -1,17 +1,11 @@
 import json
 import re
-from time import sleep
 from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse
 
-from bs4 import BeautifulSoup
-from selenium.common.exceptions import TimeoutException
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as ec
-from selenium.webdriver.support.ui import WebDriverWait
 from shapely.geometry import Point
 
-from browser import Browser
+from browser import Response
 
 URL = 'https://www.tripadvisor.com'
 
@@ -24,13 +18,31 @@ def find_value_nested_dict(key: Any, dct: dict) -> Optional[Any]:
         for k in dct.keys():
             if isinstance(dct[k], dict) and key in dct[k]:
                 return dct[k][key]
-
     return None
 
 
-def extract_digits(line: str) -> int:
+def extract_integer(line: str) -> int:
     """Extract alle cijfers uit een string."""
-    return int(re.sub(r'[^0-9]', '', line))
+    if isinstance(line, int):
+        return line
+    try:
+        return int(re.sub(r'[^0-9]', '', line))
+    except (TypeError, ValueError, AttributeError):
+        return -1
+
+
+def extract_float(line) -> float:
+    if isinstance(line, float):
+        return line
+
+    elif isinstance(line, int):
+        return float(line)
+
+    else:
+        try:
+            return float(re.sub(r'[^0-9.]', '', line.replace(',', '.')))
+        except (TypeError, ValueError, AttributeError):
+            return -1.0
 
 
 def extract_phonenr(line: str) -> str:
@@ -38,68 +50,51 @@ def extract_phonenr(line: str) -> str:
     return re.sub(r'[^+0-9]', '', line)
 
 
-class Response:
-    link: str
-    _browser: Browser
-    page_source: str
-    soup: BeautifulSoup
-
-    def __init__(self, link: str, headless: bool = True):
-        self.link = link
-        self._browser = Browser(headless=headless).__enter__()
-
-    def get_response(self, wait_for_elements: list = None):
-        self._browser.driver.get(self.link)
-
-        if wait_for_elements:
-            for el in wait_for_elements:
-                self.add_wait_for_element(el)
-
-        self.page_source = self._browser.driver.page_source
-        self._browser.driver.close()
-
-    def create_soup(self):
-        self.soup = BeautifulSoup(self.page_source, features='lxml')
-
-    def close(self):
-        self._browser.driver.quit()
-
-    def add_wait_for_element(self, xpath_elem):
-        """Wait for element to appear on website."""
-        try:
-            element_present = ec.presence_of_element_located((By.XPATH, xpath_elem))
-            WebDriverWait(self._browser.driver, 10).until(element_present)
-            sleep(0.20)
-        except TimeoutException:
-            print('WARNING: Timed out waiting for page to load')
-
-
 class Attractie:
     _response: Response
-    _xpath_staticmap_element: str = "//img[@class='attractions-attraction-review-location-StaticMap__map--3_EAL']"
 
-    def __init__(self, title=None, ta_id=None, plaats=None, postcode=None, rating=None, straat=None,
-                 country=None, aantal_reviews=None, reviews=None, coords=None):
-        self._tripadvisor_id: int = ta_id
-        self._title: str = title
-        self._straat: str = straat
-        self._postcode: str = postcode
-        self._plaats: str = plaats
-        self._country: str = country
-        self._coords: Point = coords
-        self._rating: float = rating
-        self._aantal_reviews: int = aantal_reviews
-        self._reviews: str = reviews  # TO DO opsplitsen
+    _xpath_staticmap_element: str = "//img[contains(@src, 'maps.google')]"
+    _tripadvisor_id: int
+    _title: str
+    _straat: str
+    _postcode: str
+    _plaats: str
+    _country: str
+    _coords: Point
+    _rating: float
+    _aantal_reviews: int
+    _reviews: list
+    _link: str
+
+    def __init__(self, link: str, headless: bool = True):
+        self.get_attractie(f'{URL}{link}', headless=headless)
 
     def __repr__(self):
         return f"Titel: {self.title}\n" \
                f"ID: {self.tripadvisor_id}\n" \
                f"Rating: {self.rating}\n" \
                f"Aantal reviews: {self.aantal_reviews}\n" \
+               f"Reviews: {self.reviews}\n" \
                f"Straat: {self.straat}\n" \
                f"Land: {self.country}\n" \
                f"Postcode: {self.postcode}\n" \
                f"Coordinaten: {self.coords}"
+
+    @property
+    def link(self) -> str:
+        return self._link
+
+    @link.setter
+    def link(self, value):
+        try:
+            link = urlparse(str(value)).path.rstrip('/')
+
+        except (AttributeError, TypeError, ValueError):
+            print(f'geen geldige url: {value}')
+            self._link = ''
+
+        else:
+            self._link = link
 
     @property
     def response(self):
@@ -115,212 +110,246 @@ class Attractie:
 
     @property
     def tripadvisor_id(self) -> int:
-        assert isinstance(self._tripadvisor_id, int)
         return self._tripadvisor_id
 
     @tripadvisor_id.setter
     def tripadvisor_id(self, value: str):
-        self._tripadvisor_id = int(value) if value else -1
+        self._tripadvisor_id = extract_integer(value)
 
     @property
     def rating(self) -> float:
-        assert isinstance(self._rating, float)
         return self._rating
 
     @rating.setter
-    def rating(self, value):
-        self._rating = float(value) if value else -1.0
+    def rating(self, value: str):
+        self._rating = extract_float(value)
 
     @property
-    def plaats(self):
+    def plaats(self) -> str:
         return self._plaats
 
     @plaats.setter
-    def plaats(self, value):
+    def plaats(self, value: str):
         self._plaats = value if value else ''
 
     @property
-    def straat(self):
+    def straat(self) -> str:
         return self._straat
 
     @straat.setter
-    def straat(self, value):
+    def straat(self, value: str):
         self._straat = value if value else ''
 
     @property
-    def postcode(self):
+    def postcode(self) -> str:
         return self._postcode
 
     @postcode.setter
-    def postcode(self, value):
+    def postcode(self, value: str):
         self._postcode = value if value else ''
 
     @property
-    def aantal_reviews(self):
+    def aantal_reviews(self) -> int:
         return self._aantal_reviews
 
     @aantal_reviews.setter
-    def aantal_reviews(self, value):
-        self._aantal_reviews = int(value) if value else -1
+    def aantal_reviews(self, value: str):
+        self._aantal_reviews = extract_integer(value)
 
     @property
-    def coords(self):
+    def coords(self) -> Point:
         return self._coords
 
     @coords.setter
     def coords(self, value):
-        self._coords = Point(float(v) for v in value) if value and len(value) == 2 else ''
+        try:
+            lon = extract_float(value[0])
+            lat = extract_float(value[1])
+        except (IndexError, TypeError):
+            lat, lon = -1, -1
+        self._coords = Point(lon, lat)
 
     @property
-    def country(self):
+    def country(self) -> str:
         return self._country
 
     @country.setter
-    def country(self, value):
+    def country(self, value: str):
         self._country = value if value else ''
 
-    def from_link(self, link: str, headless: bool = True):
-        self._response = Response(link, headless=headless)
-        self.response.get_response(
-            wait_for_elements=[self._xpath_staticmap_element]
+    @property
+    def reviews(self) -> list:
+        return self._reviews
+
+    @reviews.setter
+    def reviews(self, value):
+        self._reviews = [extract_integer(r.string) for r in value] if value else [-1] * 5
+
+    @property
+    def data(self) -> tuple:
+        attrac = (
+            'NEW',
+            self.title,
+            self.link,
+            self.tripadvisor_id,
+            self.rating,
+            self.straat,
+            self.postcode,
+            self.plaats,
+            self.country,
+            self.aantal_reviews,
+            *self.reviews,
+            self.coords.x,
+            self.coords.y
         )
+        if len(attrac) != 17:
+            print('Warning: attractie != 17')
+
+        self.print_()
+        return attrac
+
+    def print_(self):
+        print(
+            f"Attractie(titel={self.title}, "
+            f"id={self.tripadvisor_id}, "
+            f"rating={self.rating}, "
+            f"aantal_reviews={self.aantal_reviews}, "
+            f"coord={self.coords}"
+         )
+
+    def from_link(self, link: str, headless: bool = True):
+        self.link = link
+        self._response = Response(link, headless=headless, init=True)
+
+        wait = [
+            (self._xpath_staticmap_element, 1),
+            ("//span[@class='_82HNRypW']", 0.5)
+        ]
+
+        self.response.get_response(wait_for_elements=wait)
         self.response.create_soup()
 
-    def find_details_in_script_header(self, key: Any):
-        script = self.response.soup.find('script', {'type': 'application/ld+json'}).next
-        json_dict = json.loads(script)
-        return find_value_nested_dict(key, json_dict)
+    def find_details_in_script_header(self, key: Any) -> dict:
+        try:
+            script = self.response.soup.find('script', {'type': 'application/ld+json'})
+            value = find_value_nested_dict(key, json.loads(script.string)) or {}
+
+        except (TypeError, AttributeError):
+            return {}
+
+        else:
+            return value
 
     def find_title(self):
-        self.title = self.find_details_in_script_header('name')
-        return self
+        title = self.find_details_in_script_header('name')
+
+        if not title:
+            try:
+                title = self.response.soup.find('span', {'class': 'IKwHbf8J'}).get_text(strip=True)
+            except AttributeError:
+                pass
+
+        self.title = title
 
     def find_ta_id(self):
-        res = re.search(
-            r'^/[\w]+-g([0-9]+)-d([0-9]+)',
-            urlparse(self.response.link).path,
-            re.IGNORECASE
-        )
-        self.tripadvisor_id = res.group(2) if res else -1
-        return self
+        try:
+            res = re.search(
+                r'^/[\w]+-g([0-9]+)-d([0-9]+)',
+                urlparse(self.response.link).path,
+                re.IGNORECASE
+            ).group(2)
+
+        except (AttributeError, ValueError, TypeError):
+            self.tripadvisor_id = -1
+
+        else:
+            self.tripadvisor_id = res
 
     def find_rating(self):
-        self.rating = self.find_details_in_script_header('ratingValue')
-        return self
+        rating = self.find_details_in_script_header('ratingValue')
+
+        if not rating:
+            try:
+                content = self.response.get_css_properties(
+                    elem=["span.uq1qMUbD._2n4wJlqY", "span.uq1qMUbD._2vB__cbb"],
+                    by='css',
+                    prop="content",
+                    pseudo=':after'
+                )
+                full = [repr(f).count("\\ue129") for f in content]
+                half = [repr(h).count("\\ue12a") * 5 for h in content]  # 0 of 1
+                rating = f'{min(full)}.{max(half)}'
+
+            except TypeError:
+                rating = None
+
+        self.rating = rating
 
     def find_aantal_reviews(self):
-        self.aantal_reviews = self.find_details_in_script_header('reviewCount')
-        return self
+        aantal_reviews = self.find_details_in_script_header('reviewCount')
+
+        if not aantal_reviews:
+            try:
+                aantal_reviews = self.response.soup.find('span', {'class': '_82HNRypW'}).get_text()
+            except AttributeError:
+                pass
+
+        self.aantal_reviews = aantal_reviews
 
     def find_adres_straat(self):
         self.straat = self.find_details_in_script_header('streetAddress')
-        return self
 
     def find_postcode(self):
         self.postcode = self.find_details_in_script_header('postalCode')
-        return self
 
     def find_plaats(self):
         self.plaats = self.find_details_in_script_header('addressLocality')
-        return self
 
     def find_country(self):
-        self._country = self.find_details_in_script_header('addressCountry').get('name')
-        return self
+        coun = self.find_details_in_script_header('addressCountry')
+        self.country = coun.get('name', None)
 
     def find_coords(self):
-        coords = self.response.soup \
-            .find('img', {'src': lambda x: str(x).startswith('https://maps')}).get('src', None)
-        if coords:
-            coords = parse_qs(coords).get('center', [''])[0]
-            self.coords = coords.split(',')
+        def find_map(x):
+            return str(x).startswith('https://maps') or 'staticmap' in str(x)
+
+        try:
+            coords = self.response.soup.find('img', {'src': find_map})
+            coords = parse_qs(coords.get('src'))['center']
+            coords = str(coords).split(',')
+
+        except (AttributeError, IndexError, TypeError, KeyError, ValueError):
+            self.coords = None
+
         else:
-            return []
+            self.coords = coords
 
+    def find_reviews(self):
+        try:
+            soup = self.response.soup
+            reviews = soup.find_all(
+                'span', {'class': 'location-review-review-list-parts-ReviewRatingFilter__row_num--3cSP7'}
+            )
 
-"""
-def get_data3(link: str, driver):
-    ""Verwerk alle data van website <link>.""
-    driver.get(BASE + link)
+            if not reviews:
+                reviews = soup.find_all('span', {'class': 'eqh_0ztw'})
 
-    wait_for(driver, "//img[@class='mapImg']")
+        except AttributeError:
+            self.reviews = []
 
-    soup = BeautifulSoup(driver.page_source, features='lxml')
-
-    title = soup.find('h1', {'class': 'ui_header h1'})
-    title = title.text if title is not None else ''
-
-    ta_id = re.search(r'^/[\w]+-g([0-9]+)-d([0-9]+)', link, re.IGNORECASE)
-    ta_id = int(ta_id.group(2)) if ta_id is not None else 0
-
-    rating = soup.find('div', {'class': 'section rating'})
-    rating = Decimal(re.search(r'[0-9.]{1,3}', rating.find('a')['alt']).group(0)) \
-        if rating is not None else -1
-
-    adres_str = soup.find('span', {'class': 'street-address'})
-    adres_str = adres_str.text.strip(',').strip() if adres_str is not None else ''
-
-    adres_local = soup.find('span', {'class': 'locality'})
-    adres_local = adres_local.text.strip(',').replace(',', '').strip() \
-        if adres_local is not None else ''
-
-    pcode = re.match(r'[0-9]{4} [A-Z]{2}|[0-9]{4}', adres_local)
-    pcode = pcode[0].strip() if pcode is not None else ''
-
-    plaats = re.sub(r'[0-9|A-Z{1}]+[A-Z|0-9]{3}[ ]|[A-Z]{2} ', '', adres_local).strip()
-    plaats = '' if len(plaats) <= 2 else plaats
-
-    adres_country = soup.find('span', {'class': 'country-name'})
-    adres_country = adres_country.text.strip(',').strip() \
-        if adres_country is not None else ''
-
-    aantal_reviews = soup.find('a', {'class': 'seeAllReviews'})
-    aantal_reviews = extract_nr(aantal_reviews.text) \
-        if aantal_reviews is not None else -100
-
-    reviews = soup.find('div', {'class': 'section histogram'})
-    reviews = reviews.find_all(
-        'span', {'class': 'row_count row_cell'}
-    ) if reviews is not None else []
-
-    if reviews:
-        if len(reviews) == 5:
-            reviews = [extract_nr(r.text) for r in reviews]
         else:
-            reviews = [-1, -1, -1, -1, -1]
-    else:
-        reviews = [-1, -1, -1, -1, -1]
+            self.reviews = reviews
 
-    phonenr = soup.find('div', {'class': 'detail_section phone'})
-    phonenr = extract_phonenr(phonenr.text) if phonenr is not None else ''
+    def get_attractie(self, link: str, headless: bool):
+        self.from_link(link, headless=headless)
 
-    coords = soup.find('img', {'class': 'mapImg'})
-    if coords is not None:
-        coords = parse_qs(coords['src'])
-        coords = coords['center'][0].split(',') if 'center' in coords else [0, 0]
-        coords = [Decimal(c) for c in coords]
-    else:
-        coords = [0, 0]
-
-    return (
-        'NEW',
-        title,
-        link,
-        ta_id,
-        rating,
-        adres_str,
-        adres_local,
-        pcode,
-        plaats,
-        adres_country,
-        aantal_reviews,
-        reviews[0],
-        reviews[1],
-        reviews[2],
-        reviews[3],
-        reviews[4],
-        phonenr,
-        coords[0],
-        coords[1],
-    )
-"""
+        self.find_coords()
+        self.find_title()
+        self.find_rating()
+        self.find_aantal_reviews()
+        self.find_adres_straat()
+        self.find_country()
+        self.find_plaats()
+        self.find_postcode()
+        self.find_ta_id()
+        self.find_reviews()

@@ -8,12 +8,13 @@ import re
 from datetime import datetime as dt
 from time import sleep
 
-from bs4 import BeautifulSoup, ResultSet
+import bs4
 from selenium.common.exceptions import TimeoutException
-from selenium.webdriver import Chrome
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
+
+from browser import Browser, scroll_down
 
 BASE = 'http://www.tripadvisor.com'
 
@@ -42,79 +43,61 @@ def get_provincie_from_url(url_str: str) -> str:
         return ''
 
 
-def scroll_down(driver: Chrome):
-    # Get scroll height
-    last_height = driver.execute_script("return document.body.scrollHeight")
-    try_times = 0
-
-    while True:
-        # Scroll down to bottom
-        driver.execute_script("window.scrollBy(0,2000)")
-
-        # Wait to load page
-        sleep(SLEEP)
-
-        # Calculate new scroll height and compare with last scroll height
-        new_height = driver.execute_script("return document.body.scrollHeight")
-
-        if last_height == new_height:
-            try_times += 1
-
-        if try_times > 3:
-            try_times = 0
-            break
-        last_height = new_height
-
-
 def strip_link(js_link: str) -> str:
     return re.search(r'[^*.]?(/Attraction[\w+-]+.html)', js_link, re.IGNORECASE).group(1)
 
 
-def find_link(bs_obj: ResultSet) -> str:
+def find_link(bs_obj: bs4.ResultSet) -> str:
     if 'href' in bs_obj.attrs:
-        return strip_link(bs_obj['href'])
+        return strip_link(bs_obj.get('href'))
 
     elif 'onclick' in bs_obj.attrs:
-        return strip_link(bs_obj['onclick'])
+        return strip_link(bs_obj.get('onclick'))
 
     else:
         print(bs_obj)
         return "GEEN LINK"
 
 
-def get_links(soup: BeautifulSoup, link: str) -> set:
-    return {
+def get_links(soup: bs4.BeautifulSoup, link: str) -> list:
+    return [
         (
-            i.find('a').text if i.find('a') is not None else 'GEEN TITEL',
-            find_link(i.find('a')),
+            i.find('a').get_text(strip=True) if i.find('a') is not None else 'GEEN TITEL',
+            find_link(i.find('a')),  # link to attractie
             dt.now().date(),
             'NEW',
             get_provincie_from_url(link),
             link
         )
-        for i in soup.find_all('div', {'class': ['listing_title', 'listing_title ']})
-    }
+        for i in soup.find_all(
+            'div', {'class': [
+                'listing_title',
+                'listing_title ',
+                re.compile(r'[\w+]listingsContainer')]}
+        )
+    ]
 
 
-def get_data2(link: str, driver: Chrome) -> list:
+def get_activities(category: tuple, browser: Browser) -> tuple:
     """Return list met attractie links."""
+    driver = browser.driver
+    link = category[1]
+
     driver.get(BASE + link)
     sleep(SLEEP)
 
-    page_counter = 1
-    result = set()
+    page_counter = 0
 
     while True:
         page_counter += 1
 
-        scroll_down(driver)
+        scroll_down(browser)
 
-        soup = BeautifulSoup(driver.page_source, features='lxml')
+        soup = bs4.BeautifulSoup(driver.page_source, features='lxml')
         data = get_links(soup, link)
 
         for i in data:
-            print(i[1])
-            result.add(i)
+            yield i
 
         if (
                 not driver.find_elements_by_xpath(XPATH_BUTTON_DISABLED) and
@@ -126,5 +109,3 @@ def get_data2(link: str, driver: Chrome) -> list:
             print(f'CLICK...   (pagina {page_counter})')
         else:
             break
-
-    return list(result)
