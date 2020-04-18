@@ -7,14 +7,14 @@ Scrape categorieën.
 import re
 from datetime import datetime as dt
 from itertools import chain
-from time import sleep
 
 import bs4
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.common.exceptions import TimeoutException
 
-from browser import Browser, hide_elements
+from browser import Browser, hide_elements, scroll_into_view
 
 URL = 'https://www.tripadvisor.com'
 URL_NH = f'{URL}/Attractions-g188587-Activities-North_Holland_Province.html'
@@ -33,15 +33,24 @@ def _get_categories(browser: Browser, url: str) -> bs4.ResultSet:
 
     hide_elements(["sbx_banner"], browser)
 
-    driver.find_element_by_xpath(XPATH_VIEW_MORE_BUTTON).click()
+    scroll_into_view((By.XPATH, XPATH_VIEW_MORE_BUTTON), browser)
 
-    element_present = ec.text_to_be_present_in_element(
-        locator=(By.XPATH, XPATH_VIEW_MORE_BUTTON),
-        text_=XPATH_VIEW_MORE_BUTTON_EN[1]
-    )
-    WebDriverWait(driver, 5).until(element_present)
-    sleep(0.75)
-    return bs4.BeautifulSoup(driver.page_source, features='lxml').find_all('a', {'class': CATEGORY_LINK_CLASS})
+    while True:
+        try:
+            element_present = ec.text_to_be_present_in_element(
+                locator=(By.XPATH, XPATH_VIEW_MORE_BUTTON),
+                text_=XPATH_VIEW_MORE_BUTTON_EN[1]
+            )
+            WebDriverWait(driver, 1).until(element_present)
+
+        except TimeoutException:
+            driver.find_element_by_xpath(XPATH_VIEW_MORE_BUTTON).click()
+
+        else:
+            cat = bs4.BeautifulSoup(driver.page_source, features='lxml').find_all('a', {'class': CATEGORY_LINK_CLASS})
+            break
+
+    return cat
 
 
 def get_data_from_item(item, provincie: str) -> tuple:

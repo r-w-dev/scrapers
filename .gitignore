@@ -8,7 +8,8 @@ __pycache__/
 *.json
 *.pickle
 *.txt
-
+chrome*
+results
 
 # C extensions
 *.so

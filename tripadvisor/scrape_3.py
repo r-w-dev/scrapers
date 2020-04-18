@@ -67,7 +67,8 @@ class Attractie:
     _link: str
 
     def __init__(self, link: str, headless: bool = True):
-        self.get_attractie(f'{URL}{link}', headless=headless)
+        self.link = link
+        self.get_attractie(headless=headless)
 
     def __repr__(self):
         return f"Titel: {self.title}\n" \
@@ -94,7 +95,7 @@ class Attractie:
             self._link = ''
 
         else:
-            self._link = link
+            self._link = f'{URL}{link}'
 
     @property
     def response(self):
@@ -217,13 +218,12 @@ class Attractie:
             f"coord={self.coords}"
          )
 
-    def from_link(self, link: str, headless: bool = True):
-        self.link = link
-        self._response = Response(link, headless=headless, init=True)
+    def from_link(self, headless: bool = True):
+        self._response = Response(self.link, headless=headless, init=True)
 
         wait = [
-            (self._xpath_staticmap_element, 1),
-            ("//span[@class='_82HNRypW']", 0.5)
+            (self._xpath_staticmap_element, 0.1),  # works: 1, 0.5
+            ("//span[@class='_82HNRypW']", 0.1)  # works: 0.5, 0.25
         ]
 
         self.response.get_response(wait_for_elements=wait)
@@ -280,7 +280,8 @@ class Attractie:
                 half = [repr(h).count("\\ue12a") * 5 for h in content]  # 0 of 1
                 rating = f'{min(full)}.{max(half)}'
 
-            except TypeError:
+            except (TypeError, ValueError):
+                # min/max throw valueerror on empty list
                 rating = None
 
         self.rating = rating
@@ -340,8 +341,8 @@ class Attractie:
         else:
             self.reviews = reviews
 
-    def get_attractie(self, link: str, headless: bool):
-        self.from_link(link, headless=headless)
+    def get_attractie(self, headless: bool):
+        self.from_link(headless=headless)
 
         self.find_coords()
         self.find_title()

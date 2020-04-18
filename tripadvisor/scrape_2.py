@@ -6,7 +6,6 @@ Scrape links naar attracties.
 """
 import re
 from datetime import datetime as dt
-from time import sleep
 
 import bs4
 from selenium.common.exceptions import TimeoutException
@@ -23,13 +22,11 @@ XPATH_LISTING_TITLE = "//div[@class='listing_title']/a"
 XPATH_LISTING_TITLE_SPACE = "//div[@class='listing_title ']/a"
 XPATH_BUTTON_DISABLED = "//span[@class='nav next disabled']"
 
-SLEEP = 0.2  # minimaal 0.2 met headless=True
-
 
 def _wait_for(driver, elem: str):
     try:
         element_present = ec.presence_of_element_located((By.XPATH, elem))
-        WebDriverWait(driver, 2).until(element_present)
+        WebDriverWait(driver, 1).until(element_present)
     except TimeoutException:
         print('Timed out waiting for page to load')
 
@@ -84,7 +81,6 @@ def get_activities(category: tuple, browser: Browser) -> tuple:
     link = category[1]
 
     driver.get(BASE + link)
-    sleep(SLEEP)
 
     page_counter = 0
 
@@ -99,13 +95,14 @@ def get_activities(category: tuple, browser: Browser) -> tuple:
         for i in data:
             yield i
 
-        if (
-                not driver.find_elements_by_xpath(XPATH_BUTTON_DISABLED) and
-                driver.find_elements_by_xpath(XPATH_NEXT_BUTTON)
-        ):
+        button_disabled = driver.find_elements_by_xpath(XPATH_BUTTON_DISABLED)
+        next_button_enabled = driver.find_elements_by_xpath(XPATH_NEXT_BUTTON)
+
+        if not button_disabled and next_button_enabled:
             _wait_for(driver, XPATH_NEXT_BUTTON)
             driver.find_element_by_xpath(XPATH_NEXT_BUTTON).click()
 
             print(f'CLICK...   (pagina {page_counter})')
+
         else:
             break
