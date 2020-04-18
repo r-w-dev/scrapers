@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 
 import bs4
 import psutil
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from selenium.common.exceptions import TimeoutException, NoSuchElementException, JavascriptException
 from selenium.webdriver import Chrome, ChromeOptions
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webdriver import WebDriver
@@ -54,7 +54,8 @@ class Browser:
     if os.name == 'nt':
         CHR_PATH = Path(r'C:\Users\Roel\PycharmProjects\scrapers\tripadvisor\driver\chromedriver.exe')
     else:
-        CHR_PATH = Path.cwd() / 'chromedriver' / 'chromedriver'
+        # CHR_PATH = Path().home() / 'chromedriver' / 'chromedriver'
+        CHR_PATH = '/home/vries274/scrapers/tripadvisor/chromedriver/chromedriver'
 
     @staticmethod
     def kill_existing_drivers():
@@ -76,18 +77,22 @@ class Browser:
         chr_opt.add_argument("--user-data-dir=chrome-data")
         chr_opt.add_argument("--remote-debugging-port=9222")
         chr_opt.add_argument("--disable-infobars")
+        chr_opt.add_argument("--disable-dev-shm-usage")
+        chr_opt.add_argument("--ignore-certificate-errors")
+        chr_opt.add_argument("--disable-gpu")
 
         if adblock and not self.headless:  # headless + extensions = crash
-            chr_opt.add_extension(r'C:\Users\Roel\PycharmProjects\scrapers\tripadvisor\driver\ublock.crx.crx')
+            chr_opt.add_extension(
+                r'C:\Users\Roel\PycharmProjects\scrapers\tripadvisor\driver\ublock.crx.crx')
         if incognito:
             chr_opt.add_argument('--incognito')
 
         if 'posix' in os.name:
-            chr_opt.binary_location = 'chrome/chrome'
+            chr_opt.binary_location = '/home/vries274/scrapers/tripadvisor/chrome/chrome-linux/chrome'
 
         chrome = Chrome(executable_path=self.CHR_PATH, options=chr_opt)
         chrome.set_window_size(1920, 1080)
-        print(' ---  Browser started  --- ')
+        print('\n ---  Browser started  --- \n')
         return chrome
 
     def restart(self):
@@ -155,16 +160,16 @@ class Response:
             self.soup = None
 
     def add_wait_for_element(self, xpath_elem, time_out: int = 5):
-        """Wait for element to appear on website."""
+        """Wait for element to appear on website (Silently fail)."""
         try:
             element_present = ec.presence_of_element_located((By.XPATH, xpath_elem))
             WebDriverWait(self._browser.driver, time_out).until(element_present)
-            sleep(0.20)
+
         except TimeoutException:
             # print(f'Timed out ({self.link}) ({xpath_elem})')
             pass
 
-    def get_css_properties(self, elem, prop: str, by='xpath', pseudo: str = None) -> Union[Dict, str]:
+    def get_css_properties(self, elem, prop: str, by='xpath', pseudo: str = None) -> List:
         driver = self._browser.driver
         prop = f"var prop = \'{prop}\';" if prop else ''
         item = "return items[prop];" if prop else "return items;"
@@ -188,11 +193,11 @@ class Response:
                     "   {items [compsty[index]] = compsty.getPropertyValue(compsty[index]);}"
                     f"{item}"
                 )
-
                 res = driver.execute_script(js, driver.find_element(by, el))
 
-            except NoSuchElementException:
-                res = None
+            except (NoSuchElementException, JavascriptException):
+                pass
+
             else:
                 results.append(res)
 
@@ -216,28 +221,48 @@ class Response:
         return elem.get_property(prop)
 
 
+def wait_for_document_ready_state(browser, time_out: float = 0.1):
+    ready_state = browser.driver.execute_script("return document.readyState;")
+
+    while ready_state == 'loading':
+        sleep(time_out)
+        ready_state = browser.driver.execute_script("return document.readyState;")
+
+
 def scroll_down(browser: Browser):
     # Get scroll height
     driver = browser.driver
 
-    last_height = driver.execute_script("return document.body.scrollHeight")
+    wait_for_document_ready_state(browser)
+
+    try:
+        last_height = driver.execute_script("return document.body.scrollHeight;")
+    except JavascriptException as j:
+        print("poging 0: ", j)
+        last_height = 0
+
     try_times = 0
 
     while True:
-        # Scroll down to bottom
-        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        try:
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        except JavascriptException as j:
+            print("Poging 1 (scrollen) : ", j)
 
         # Wait to load page
-        sleep(0.75)
+        sleep(0.1)  # works: 0.75
 
         # Calculate new scroll height and compare with last scroll height
-        new_height = driver.execute_script("return document.body.scrollHeight")
+        try:
+            new_height = driver.execute_script("return document.body.scrollHeight;")
+        except JavascriptException as j:
+            print("Poging 2 (nieuwe hoogte): ", j)
+            new_height = 0
 
         if last_height == new_height:
             try_times += 1
 
         if try_times > 3:
-            sleep(0.2)
             break
 
         last_height = new_height
@@ -259,5 +284,15 @@ def hide_elements(elem: list, browser: Browser):
             }
             """
         )
-    except Exception as e_:
+    except JavascriptException as e_:
         print(e_)
+
+
+def scroll_into_view(element: tuple, browser: Browser):
+    try:
+        browser.driver.execute_script(
+            "return arguments[0].scrollIntoView();",
+            browser.driver.find_element(*element)
+        )
+    except JavascriptException as j:
+        print(j)

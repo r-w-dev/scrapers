@@ -6,11 +6,12 @@ Main running class.
 """
 import os
 import pickle
+import signal
 from datetime import datetime
-from time import sleep
 
 import pandas as pd
 from more_itertools import flatten
+from selenium.common.exceptions import NoSuchElementException
 
 from browser import Browser
 from scrape_1 import get_categories
@@ -139,7 +140,8 @@ def pivot_categories(data: pd.DataFrame) -> pd.DataFrame:
         .drop(columns=['categorie']) \
         .groupby(gby_cols, as_index=False)[agg_cols] \
         .max() \
-        .set_index(['provincie', 'attrac_url'], verify_integrity=True)
+        .set_index(['provincie', 'attrac_url'], verify_integrity=True) \
+        .sort_index()
 
     return res.join(pivot_cat).reset_index()
 
@@ -197,10 +199,16 @@ def write_to_db(s1: list, s2: list, s3: set, data: pd.DataFrame) -> None:
 
     try:
         dtypes = _sqlcol(data)
-        data.to_sql('Combined', engine, schema=SCHEMA,
-                    if_exists='replace', index=False,
-                    method='multi', chunksize=1000,
-                    dtype=dtypes)
+        data.to_sql(
+            'Combined',
+            engine,
+            schema=SCHEMA,
+            if_exists='replace',
+            index=False,
+            method='multi',
+            chunksize=1000,
+            dtype=dtypes
+        )
 
     except ValueError as e_:
         print(e_)
@@ -213,16 +221,18 @@ def print_update(begin_, aantal, type_):
 
 
 def init_browser(base_url: str, headless: bool):
+    from scrape_2 import _wait_for
     chrome = Browser(base_url, headless=headless)
-    sleep(3)
 
     # klik op continue om op tripadvisor.com te blijven
     try:
-        chrome.driver.find_element_by_xpath("//span[@class='continue']").click()
-    except Exception as e_:
-        print(e_)
+        cont = "//span[@class='continue']"
+        _wait_for(chrome.driver, cont)
+        chrome.driver.find_element_by_xpath(cont).click()
 
-    sleep(1)
+    except NoSuchElementException:
+        print("Continue niet gevonden. (al op tripadvisor.com)")
+
     return chrome
 
 
@@ -232,11 +242,30 @@ def dump_to_file(to_dump: list):
 
 
 def dump_to(file_name: str, to_dump: list):
-    with open(file_name, 'wb') as f:
-        pickle.dump(to_dump, f)
+    if to_dump:
+        print(f'Dumping to "{file_name}" ({len(to_dump)})')
+
+        with open(file_name, 'wb') as f:
+            pickle.dump(to_dump, f)
+
+    else:
+        print(f"{file_name} bevat geen data.")
+
+
+def handle_sig_term(signum, frame):
+    print("handling sudden stop")
+    signal.signal(signum, signal.SIG_IGN)
+
+    print("  -- FINALLY --  ")
+    dump_to(file_cat, categories)
+    dump_to(file_act, activities)
+    dump_to(file_att, attracties)
+    import sys
+    sys.exit(0)
 
 
 if __name__ == '__main__':
+    # signal.signal(signal.SIGINT, handle_sig_term)
 
     browser = None
     categories, activities, attracties = [], [], []
@@ -251,21 +280,17 @@ if __name__ == '__main__':
     file_att = f'{output}/attracties {begin_fmt}.pickle'
 
     try:
-        browser = init_browser('http://www.tripadvisor.com', headless=False)
+        browser = init_browser('http://www.tripadvisor.com', headless=True)
 
         categories.extend(get_categories(browser))
-        dump_to(file_cat, categories)
 
         activities.extend(flatten(get_activities(cat, browser) for cat in categories))
-        dump_to(file_act, activities)
 
         activ_links = {act[1] for act in activities}
-
         attracties.extend({Attractie(act_link).data for act_link in activ_links})
-        dump_to(file_att, attracties)
 
     except Exception as e:
-        raise e
+        print(e.__class__)
 
     else:
         df = create_dataframe(file_cat, file_act, file_att)  
@@ -276,6 +301,12 @@ if __name__ == '__main__':
         # write_to_db(scrape1, scrape2, scrape3, df)
 
     finally:
+        print("  -- FINALLY --  ")
+        dump_to(file_cat, categories)
+        dump_to(file_act, activities)
+        dump_to(file_att, attracties)
+
         if browser:
             browser.kill()
+
         running_time(begin)
