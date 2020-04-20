@@ -86,6 +86,7 @@ def create_dataframe(cat_dump: str, act_dump: str, attrs_dump: str) -> Tuple[pd.
     )
     return df_cats, df_acts, df_attr
 
+
 def check_attr_url(url_: str):
     from urllib.parse import urlparse
     return urlparse(url_).path
@@ -110,6 +111,7 @@ def merge_(cats, acts, attrs):
         .astype({'added': 'datetime64', 'categorie': 'category'}) \
 
     res['added'] = res['added'].apply(lambda x: x.strftime('%d-%m-%Y'))
+    res['rating'].mask(res['aantal_reviews'] == -1, -1, inplace=True)
     return res
 
 
@@ -240,9 +242,9 @@ def print_update(begin_, aantal, type_):
     print(aantal, type_)
 
 
-def init_browser(base_url: str, headless: bool):
+def init_browser(base_url: str, headless_: bool):
     from scrape_2 import _wait_for
-    chrome = Browser(base_url, headless=headless)
+    chrome = Browser(base_url, headless=headless_)
 
     # klik op continue om op tripadvisor.com te blijven
     try:
@@ -303,15 +305,14 @@ if __name__ == '__main__':
 
     if scrape:
         try:
-            browser = init_browser('http://www.tripadvisor.com', headless=headless)
+            browser = init_browser('http://www.tripadvisor.com', headless_=headless)
 
             categories.extend(get_categories(browser))
 
-            activities.extend(flatten(get_activities(cat, browser) for cat in categories if cat[0] == 'Tours'))
+            activities.extend(flatten(get_activities(cat, browser) for cat in categories))  # if cat[0] == 'Tours'
 
             activ_links = {act[1] for act in activities}
-            for act_link in activ_links:
-                attracties.append(Attractie(act_link, headless).data)
+            attracties.extend(Attractie(act_link, headless).data for act_link in activ_links)
 
         except Exception as e:
             print(e)

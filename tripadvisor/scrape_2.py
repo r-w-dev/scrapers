@@ -52,6 +52,9 @@ def strip_link(js_link: str) -> str:
 
 
 def find_link(bs_obj: bs4.ResultSet) -> str:
+    if not hasattr(bs_obj, 'attrs'):
+        print('bs_obj betaat niet.')
+
     if 'href' in bs_obj.attrs:
         return strip_link(bs_obj.get('href'))
 
@@ -107,6 +110,7 @@ def get_activities(category: tuple, browser: Browser) -> tuple:
 
         scroll_down(browser)
 
+        sleep(0.5)
         soup = bs4.BeautifulSoup(driver.page_source, features='lxml')
 
         data = get_links(soup, link)
@@ -118,12 +122,19 @@ def get_activities(category: tuple, browser: Browser) -> tuple:
         next_button_enabled1 = driver.find_elements_by_xpath(XPATH_NEXT_BUTTON_1)
         next_button_enabled2 = driver.find_elements_by_xpath(XPATH_NEXT_BUTTON_2)
 
-        next_button = XPATH_NEXT_BUTTON_1 if next_button_enabled1 else XPATH_NEXT_BUTTON_2
+        if next_button_enabled1:
+            next_button = XPATH_NEXT_BUTTON_1
+        elif next_button_enabled2:
+            next_button = XPATH_NEXT_BUTTON_2
+        else:
+            next_button = None
+            if button_disabled:
+                print("Einde categorie.")
 
         if not button_disabled and (next_button_enabled1 or next_button_enabled2):
             _wait_for(driver, next_button)
             driver.find_element_by_xpath(next_button).click()
-            sleep(0.5)
+            sleep(1)
 
             print(f'CLICK...   (pagina {page_counter})')
 

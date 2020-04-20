@@ -215,7 +215,8 @@ class Attractie:
             f"id={self.tripadvisor_id}, "
             f"rating={self.rating}, "
             f"aantal_reviews={self.aantal_reviews}, "
-            f"coord={self.coords}"
+            f"coord={self.coords}, "
+            f"link={self.link.path})"
          )
 
     def from_link(self, headless: bool = True):
@@ -267,23 +268,27 @@ class Attractie:
             self.tripadvisor_id = res
 
     def find_rating(self):
-        rating = self.find_details_in_script_header('ratingValue')
+        if self.aantal_reviews == -1:  # Geen reviews, geen rating.
+            rating = None
 
-        if not rating:
-            try:
-                content = self.response.get_css_properties(
-                    elem=["span.uq1qMUbD._2n4wJlqY", "span.uq1qMUbD._2vB__cbb"],
-                    by='css',
-                    prop="content",
-                    pseudo=':after'
-                )
-                full = [repr(f).count("\\ue129") for f in content]
-                half = [repr(h).count("\\ue12a") * 5 for h in content]  # 0 of 1
-                rating = f'{min(full)}.{max(half)}'
+        else:
+            rating = self.find_details_in_script_header('ratingValue')
 
-            except (TypeError, ValueError):
-                # min/max throw valueerror on empty list
-                rating = None
+            if not rating:
+                try:
+                    content = self.response.get_css_properties(
+                        elem=["span.uq1qMUbD._2n4wJlqY", "span.uq1qMUbD._2vB__cbb"],
+                        by='css',
+                        prop="content",
+                        pseudo=':after'
+                    )
+                    full = [repr(f).count("\\ue129") for f in content]
+                    half = [repr(h).count("\\ue12a") * 5 for h in content]  # 0 of 1
+                    rating = f'{min(full)}.{max(half)}'
+
+                except (TypeError, ValueError):
+                    # min/max throw valueerror on empty list
+                    rating = None
 
         self.rating = rating
 
@@ -357,8 +362,8 @@ class Attractie:
 
         self.find_coords()
         self.find_title()
-        self.find_rating()
         self.find_aantal_reviews()
+        self.find_rating()
         self.find_adres_straat()
         self.find_country()
         self.find_plaats()
