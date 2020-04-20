@@ -14,7 +14,7 @@ from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.common.exceptions import TimeoutException
 
-from browser import Browser, hide_elements, scroll_into_view
+from tripadvisor.browser import Browser, hide_elements, scroll_into_view
 
 URL = 'https://www.tripadvisor.com'
 URL_NH = f'{URL}/Attractions-g188587-Activities-North_Holland_Province.html'
@@ -57,7 +57,7 @@ def get_data_from_item(item, provincie: str) -> tuple:
     return (
         re.sub(r'[^a-zA-Z &]', '', item.get_text(strip=True)).strip(),
         item['href'],  # link to activities
-        dt.now().date(),
+        dt.now().date().isoformat(),
         'NEW',
         provincie,
     )
@@ -69,3 +69,4 @@ def get_categories(browser: Browser) -> list:
     fl = (get_data_from_item(item, 'Flevoland') for item in _get_categories(browser, URL_FL))
 
     return [item for item in chain(nh, fl)]
+

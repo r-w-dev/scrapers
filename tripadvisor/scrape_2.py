@@ -6,6 +6,7 @@ Scrape links naar attracties.
 """
 import re
 from datetime import datetime as dt
+from time import sleep
 
 import bs4
 from selenium.common.exceptions import TimeoutException
@@ -13,14 +14,20 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
 
-from browser import Browser, scroll_down
+from tripadvisor.browser import Browser, scroll_down, wait_for_document_ready_state
 
 BASE = 'http://www.tripadvisor.com'
 
-XPATH_NEXT_BUTTON = "//a[@class='nav next rndBtn ui_button primary taLnk']"
+XPATH_NEXT_BUTTON_1 = "//a[@class='nav next rndBtn ui_button primary taLnk']"
+XPATH_NEXT_BUTTON_2 = "//a[@class='ui_button nav next primary ']"
+
+XPATH_BUTTON_DISABLED = "//span[@class='ui_button nav next primary disabled']"
+
 XPATH_LISTING_TITLE = "//div[@class='listing_title']/a"
 XPATH_LISTING_TITLE_SPACE = "//div[@class='listing_title ']/a"
-XPATH_BUTTON_DISABLED = "//span[@class='nav next disabled']"
+# XPATH_BUTTON_DISABLED = "//span[@class='nav next disabled']"
+
+LOC_CATEGORY_ITEM = 'attractions-attraction-filtered-main-index__listItem--3trCl'
 
 
 def _wait_for(driver, elem: str):
@@ -57,6 +64,18 @@ def find_link(bs_obj: bs4.ResultSet) -> str:
 
 
 def get_links(soup: bs4.BeautifulSoup, link: str) -> list:
+    # list_attrs = soup.find(
+    #     'div', {'class':
+    #         [
+    #             'listing_title',
+    #             'listing_title ',
+    #             re.compile(r'[\w+]listingsContainer')
+    #         ]
+    #     }
+    # )
+    # if not list_attrs:
+    #     print(f'WARNING: Attracties niet opgehaald ({link})')
+
     return [
         (
             i.find('a').get_text(strip=True) if i.find('a') is not None else 'GEEN TITEL',
@@ -66,12 +85,11 @@ def get_links(soup: bs4.BeautifulSoup, link: str) -> list:
             get_provincie_from_url(link),
             link
         )
-        for i in soup.find_all(
-            'div', {'class': [
-                'listing_title',
-                'listing_title ',
-                re.compile(r'[\w+]listingsContainer')]}
-        )
+        for i in soup.find_all('div', {'class': [
+                lambda x: str(x).startswith('attractions-ap-product-card-ProductCard__productCard'),
+                'attraction_element'
+            ]
+        })
     ]
 
 
@@ -82,7 +100,7 @@ def get_activities(category: tuple, browser: Browser) -> tuple:
 
     driver.get(BASE + link)
 
-    page_counter = 0
+    page_counter = 1
 
     while True:
         page_counter += 1
@@ -90,17 +108,22 @@ def get_activities(category: tuple, browser: Browser) -> tuple:
         scroll_down(browser)
 
         soup = bs4.BeautifulSoup(driver.page_source, features='lxml')
+
         data = get_links(soup, link)
 
         for i in data:
             yield i
 
         button_disabled = driver.find_elements_by_xpath(XPATH_BUTTON_DISABLED)
-        next_button_enabled = driver.find_elements_by_xpath(XPATH_NEXT_BUTTON)
+        next_button_enabled1 = driver.find_elements_by_xpath(XPATH_NEXT_BUTTON_1)
+        next_button_enabled2 = driver.find_elements_by_xpath(XPATH_NEXT_BUTTON_2)
 
-        if not button_disabled and next_button_enabled:
-            _wait_for(driver, XPATH_NEXT_BUTTON)
-            driver.find_element_by_xpath(XPATH_NEXT_BUTTON).click()
+        next_button = XPATH_NEXT_BUTTON_1 if next_button_enabled1 else XPATH_NEXT_BUTTON_2
+
+        if not button_disabled and (next_button_enabled1 or next_button_enabled2):
+            _wait_for(driver, next_button)
+            driver.find_element_by_xpath(next_button).click()
+            sleep(0.5)
 
             print(f'CLICK...   (pagina {page_counter})')
 
