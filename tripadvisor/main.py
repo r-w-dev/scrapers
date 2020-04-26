@@ -5,34 +5,45 @@ Main running class.
 @email: roel.de.vries@amsterdam.nl
 """
 import os
+import sys
 import pickle
 import signal
 from datetime import datetime
+from typing import Tuple
 
 import pandas as pd
 from more_itertools import flatten
 from selenium.common.exceptions import NoSuchElementException
 
-from browser import Browser
-from scrape_1 import get_categories
-from scrape_2 import get_activities
-from scrape_3 import Attractie
+from tripadvisor.browser import Browser
+from tripadvisor.scrape_1 import get_categories
+from tripadvisor.scrape_2 import get_activities
+from tripadvisor.scrape_3 import Attractie
 
 
 def _datetime_now() -> str:
     return datetime.now().strftime('%d-%m-%Y %H%M')
 
 
-def create_dataframe(cat_dump: str, act_dump: str, attrs_dump: str) -> pd.DataFrame:
+def create_dataframe(cat_dump: str, act_dump: str, attrs_dump: str) -> Tuple[pd.DataFrame, ...]:
     """Create dataframe from scraped data."""
-    with open(cat_dump, 'rb') as s1:
-        cats = pickle.load(s1)
+    if os.path.exists(cat_dump):
+        with open(cat_dump, 'rb') as s1:
+            cats = pickle.load(s1)
+    else:
+        cats = []
 
-    with open(act_dump, 'rb') as s2:
-        acts = pickle.load(s2)
+    if os.path.exists(act_dump):
+        with open(act_dump, 'rb') as s2:
+            acts = pickle.load(s2)
+    else:
+        acts = []
 
-    with open(attrs_dump, 'rb') as s3:
-        attrs = pickle.load(s3)
+    if os.path.exists(attrs_dump):
+        with open(attrs_dump, 'rb') as s3:
+            attrs = pickle.load(s3)
+    else:
+        attrs = []
 
     df_cats = pd.DataFrame(cats, columns=[
         'categorie',
@@ -73,13 +84,24 @@ def create_dataframe(cat_dump: str, act_dump: str, attrs_dump: str) -> pd.DataFr
             'lon'
         ],
     )
+    return df_cats, df_acts, df_attr
 
-    res = df_attr \
-        .assign(**{
-            'attrac_url': df_attr['attrac_url'].apply(lambda x: f'/{x}' if not x.startswith('/') else x)
-        }) \
-        .merge(df_acts, how='left', on='attrac_url') \
-        .merge(df_cats, how='left', on='cat_url')
+
+def check_attr_url(url_: str):
+    from urllib.parse import urlparse
+    return urlparse(url_).path
+
+
+def merge_(cats, acts, attrs):
+    if cats.empty or acts.empty or attrs.empty:
+        return pd.DataFrame()
+
+    attrs = attrs.assign(**{'attrac_url': attrs['attrac_url'].apply(check_attr_url)})
+    acts = acts.assign(**{'attrac_url': acts['attrac_url'].apply(check_attr_url)})
+
+    res = acts \
+        .merge(attrs, how='left', on='attrac_url') \
+        .merge(cats, how='left', on='cat_url')
 
     assert res.isna().sum().sum() == 0
 
@@ -89,18 +111,18 @@ def create_dataframe(cat_dump: str, act_dump: str, attrs_dump: str) -> pd.DataFr
         .astype({'added': 'datetime64', 'categorie': 'category'}) \
 
     res['added'] = res['added'].apply(lambda x: x.strftime('%d-%m-%Y'))
+    res['rating'].mask(res['aantal_reviews'] == -1, -1, inplace=True)
     return res
 
 
 def write_to_csv(data: pd.DataFrame):
     """Write csv file to disk."""
     print('writing csv for backup...')
-    try:
-        time = _datetime_now()
-        data.to_csv('results/attracties {0}.csv'.format(time), sep=';', index=False)
-    except Exception as e_:
-        print(e_.__class__)
-        print('writing csv failed...')
+    data.to_csv(
+        f'results/attracties {_datetime_now()}.csv',
+        sep=';',
+        index=False
+    )
 
 
 def pivot_categories(data: pd.DataFrame) -> pd.DataFrame:
@@ -111,7 +133,7 @@ def pivot_categories(data: pd.DataFrame) -> pd.DataFrame:
             columns='categorie',
             index=['provincie', 'attrac_url'],
             aggfunc='size'
-        )
+        ).sort_index()
 
     gby_cols = [
         'provincie',
@@ -220,9 +242,9 @@ def print_update(begin_, aantal, type_):
     print(aantal, type_)
 
 
-def init_browser(base_url: str, headless: bool):
+def init_browser(base_url: str, headless_: bool):
     from scrape_2 import _wait_for
-    chrome = Browser(base_url, headless=headless)
+    chrome = Browser(base_url, headless=headless_)
 
     # klik op continue om op tripadvisor.com te blijven
     try:
@@ -260,53 +282,63 @@ def handle_sig_term(signum, frame):
     dump_to(file_cat, categories)
     dump_to(file_act, activities)
     dump_to(file_att, attracties)
-    import sys
+
     sys.exit(0)
 
 
 if __name__ == '__main__':
     # signal.signal(signal.SIGINT, handle_sig_term)
+    scrape = '--scrape' in sys.argv[1:]
+    headless = '--headless' in sys.argv[1:]
 
     browser = None
     categories, activities, attracties = [], [], []
 
     begin = datetime.now()
     begin_fmt = begin.strftime('%d-%m-%Y %H%M')
-    output = f'results/{begin.strftime("%Y%m%d")}'
+    output = f'{os.getcwd()}/results/{begin.strftime("%Y%m%d")}'
     os.makedirs(output, exist_ok=True)
     
     file_cat = f'{output}/categories {begin_fmt}.pickle'
     file_act = f'{output}/activities {begin_fmt}.pickle'
     file_att = f'{output}/attracties {begin_fmt}.pickle'
 
-    try:
-        browser = init_browser('http://www.tripadvisor.com', headless=True)
+    if scrape:
+        try:
+            browser = init_browser('http://www.tripadvisor.com', headless_=headless)
 
-        categories.extend(get_categories(browser))
+            categories.extend(get_categories(browser))
 
-        activities.extend(flatten(get_activities(cat, browser) for cat in categories))
+            activities.extend(flatten(get_activities(cat, browser) for cat in categories))  # if cat[0] == 'Tours'
 
-        activ_links = {act[1] for act in activities}
-        attracties.extend({Attractie(act_link).data for act_link in activ_links})
+            activ_links = {act[1] for act in activities}
+            attracties.extend(Attractie(act_link, headless).data for act_link in activ_links)
 
-    except Exception as e:
-        print(e.__class__)
+        except Exception as e:
+            print(e)
 
-    else:
-        df = create_dataframe(file_cat, file_act, file_att)  
+        finally:
+            print("\n  -- FINALLY --  ")
+            dump_to(file_cat, categories)
+            dump_to(file_act, activities)
+            dump_to(file_att, attracties)
+
+            if browser:
+                browser.kill()
+
+            running_time(begin)
+
+    df_cat, df_act, df_att = create_dataframe(file_cat, file_act, file_att)
+
+    if not df_cat.empty and not df_act.empty and not df_att.empty:
+        df = merge_(df_cat, df_act, df_att)
         df = pivot_categories(df)
 
         df.to_pickle(f'result {begin}.pickle')
         write_to_csv(df)
         # write_to_db(scrape1, scrape2, scrape3, df)
 
-    finally:
-        print("  -- FINALLY --  ")
-        dump_to(file_cat, categories)
-        dump_to(file_act, activities)
-        dump_to(file_att, attracties)
-
-        if browser:
-            browser.kill()
-
-        running_time(begin)
+    else:
+        df_cat.to_pickle(f'{output}/df_cat_{begin_fmt}.pickle')
+        df_act.to_pickle(f'{output}/df_act_{begin_fmt}.pickle')
+        df_att.to_pickle(f'{output}/df_att_{begin_fmt}.pickle')

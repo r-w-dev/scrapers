@@ -1,11 +1,11 @@
 import json
 import re
 from typing import Any, Optional
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlparse, ParseResult
 
 from shapely.geometry import Point
 
-from browser import Response
+from tripadvisor.browser import Response, wait_for_document_ready_state
 
 URL = 'https://www.tripadvisor.com'
 
@@ -64,7 +64,7 @@ class Attractie:
     _rating: float
     _aantal_reviews: int
     _reviews: list
-    _link: str
+    _link: ParseResult
 
     def __init__(self, link: str, headless: bool = True):
         self.link = link
@@ -82,20 +82,20 @@ class Attractie:
                f"Coordinaten: {self.coords}"
 
     @property
-    def link(self) -> str:
+    def link(self) -> ParseResult:
         return self._link
 
     @link.setter
-    def link(self, value):
+    def link(self, value: str):
         try:
-            link = urlparse(str(value)).path.rstrip('/')
+            link = urlparse(f"{URL}{value}")
 
         except (AttributeError, TypeError, ValueError):
             print(f'geen geldige url: {value}')
-            self._link = ''
+            self._link = urlparse('')
 
         else:
-            self._link = f'{URL}{link}'
+            self._link = link
 
     @property
     def response(self):
@@ -191,7 +191,7 @@ class Attractie:
         attrac = (
             'NEW',
             self.title,
-            self.link,
+            self.link.path,
             self.tripadvisor_id,
             self.rating,
             self.straat,
@@ -215,11 +215,12 @@ class Attractie:
             f"id={self.tripadvisor_id}, "
             f"rating={self.rating}, "
             f"aantal_reviews={self.aantal_reviews}, "
-            f"coord={self.coords}"
+            f"coord={self.coords}, "
+            f"link={self.link.path})"
          )
 
     def from_link(self, headless: bool = True):
-        self._response = Response(self.link, headless=headless, init=True)
+        self._response = Response(self.link.geturl(), headless=headless, init=True)
 
         wait = [
             (self._xpath_staticmap_element, 0.1),  # works: 1, 0.5
@@ -227,6 +228,7 @@ class Attractie:
         ]
 
         self.response.get_response(wait_for_elements=wait)
+
         self.response.create_soup()
 
     def find_details_in_script_header(self, key: Any) -> dict:
@@ -255,7 +257,7 @@ class Attractie:
         try:
             res = re.search(
                 r'^/[\w]+-g([0-9]+)-d([0-9]+)',
-                urlparse(self.response.link).path,
+                self.link.path,
                 re.IGNORECASE
             ).group(2)
 
@@ -266,23 +268,27 @@ class Attractie:
             self.tripadvisor_id = res
 
     def find_rating(self):
-        rating = self.find_details_in_script_header('ratingValue')
+        if self.aantal_reviews == -1:  # Geen reviews, geen rating.
+            rating = None
 
-        if not rating:
-            try:
-                content = self.response.get_css_properties(
-                    elem=["span.uq1qMUbD._2n4wJlqY", "span.uq1qMUbD._2vB__cbb"],
-                    by='css',
-                    prop="content",
-                    pseudo=':after'
-                )
-                full = [repr(f).count("\\ue129") for f in content]
-                half = [repr(h).count("\\ue12a") * 5 for h in content]  # 0 of 1
-                rating = f'{min(full)}.{max(half)}'
+        else:
+            rating = self.find_details_in_script_header('ratingValue')
 
-            except (TypeError, ValueError):
-                # min/max throw valueerror on empty list
-                rating = None
+            if not rating:
+                try:
+                    content = self.response.get_css_properties(
+                        elem=["span.uq1qMUbD._2n4wJlqY", "span.uq1qMUbD._2vB__cbb"],
+                        by='css',
+                        prop="content",
+                        pseudo=':after'
+                    )
+                    full = [repr(f).count("\\ue129") for f in content]
+                    half = [repr(h).count("\\ue12a") * 5 for h in content]  # 0 of 1
+                    rating = f'{min(full)}.{max(half)}'
+
+                except (TypeError, ValueError):
+                    # min/max throw valueerror on empty list
+                    rating = None
 
         self.rating = rating
 
@@ -312,11 +318,21 @@ class Attractie:
 
     def find_coords(self):
         def find_map(x):
-            return str(x).startswith('https://maps') or 'staticmap' in str(x)
+            return str(x).startswith('https://maps')
 
+        # [i['src'] for i in self.response.soup.find_all('img') if 'src' in i.attrs]
         try:
             coords = self.response.soup.find('img', {'src': find_map})
-            coords = parse_qs(coords.get('src'))['center']
+
+            if coords:
+                coords = coords.get('src', None)
+
+            else:
+                imgs = [i['src'] for i in self.response.soup.find_all('img')
+                        if 'src' in i.attrs and i.get('src', '').startswith('/data/1.0/maps')]
+                coords = urlparse(imgs[0]).query if imgs else None
+
+            coords = parse_qs(coords)['center']
             coords = str(coords).split(',')
 
         except (AttributeError, IndexError, TypeError, KeyError, ValueError):
@@ -346,8 +362,8 @@ class Attractie:
 
         self.find_coords()
         self.find_title()
-        self.find_rating()
         self.find_aantal_reviews()
+        self.find_rating()
         self.find_adres_straat()
         self.find_country()
         self.find_plaats()

@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 from time import sleep
-from typing import Optional, List, Union, Dict
+from typing import Optional, List
 from urllib.parse import urlparse
 
 import bs4
@@ -147,6 +147,8 @@ class Response:
             self.page_source = None
 
         else:
+            wait_for_document_ready_state(self._browser, 'complete')
+
             if wait_for_elements:
                 for el, time_out in wait_for_elements:
                     self.add_wait_for_element(el, time_out)
@@ -155,7 +157,7 @@ class Response:
 
     def create_soup(self):
         try:
-            self.soup = bs4.BeautifulSoup(self.page_source, features='lxml')
+            self.soup = bs4.BeautifulSoup(self._browser.driver.page_source, features='lxml')
         except TypeError:
             self.soup = None
 
@@ -221,19 +223,26 @@ class Response:
         return elem.get_property(prop)
 
 
-def wait_for_document_ready_state(browser, time_out: float = 0.1):
-    ready_state = browser.driver.execute_script("return document.readyState;")
-
-    while ready_state == 'loading':
-        sleep(time_out)
+def wait_for_document_ready_state(browser, wait_for: str = None, time_out: float = 0.1):
+    try:
         ready_state = browser.driver.execute_script("return document.readyState;")
+
+        while ready_state == 'loading':
+            sleep(time_out)
+            ready_state = browser.driver.execute_script("return document.readyState;")
+
+            if wait_for and ready_state == wait_for:
+                break
+
+    except JavascriptException:
+        print('Document Readystate ongeldig.')
 
 
 def scroll_down(browser: Browser):
     # Get scroll height
     driver = browser.driver
 
-    wait_for_document_ready_state(browser)
+    wait_for_document_ready_state(browser, 'complete')
 
     try:
         last_height = driver.execute_script("return document.body.scrollHeight;")
@@ -250,7 +259,7 @@ def scroll_down(browser: Browser):
             print("Poging 1 (scrollen) : ", j)
 
         # Wait to load page
-        sleep(0.1)  # works: 0.75
+        wait_for_document_ready_state(browser)  # works: 0.75
 
         # Calculate new scroll height and compare with last scroll height
         try:
@@ -262,7 +271,7 @@ def scroll_down(browser: Browser):
         if last_height == new_height:
             try_times += 1
 
-        if try_times > 3:
+        if try_times > 3 or last_height != new_height:
             break
 
         last_height = new_height
