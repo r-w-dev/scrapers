@@ -5,7 +5,7 @@ from urllib.parse import parse_qs, urlparse, ParseResult
 
 from shapely.geometry import Point
 
-from tripadvisor.browser import Response, wait_for_document_ready_state
+from tripadvisor.browser import Response
 
 URL = 'https://www.tripadvisor.com'
 
@@ -226,9 +226,7 @@ class Attractie:
             (self._xpath_staticmap_element, 0.1),  # works: 1, 0.5
             ("//span[@class='_82HNRypW']", 0.1)  # works: 0.5, 0.25
         ]
-
         self.response.get_response(wait_for_elements=wait)
-
         self.response.create_soup()
 
     def find_details_in_script_header(self, key: Any) -> dict:

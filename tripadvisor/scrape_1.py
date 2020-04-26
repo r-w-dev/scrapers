@@ -9,10 +9,10 @@ from datetime import datetime as dt
 from itertools import chain
 
 import bs4
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
-from selenium.common.exceptions import TimeoutException
 
 from tripadvisor.browser import Browser, hide_elements, scroll_into_view
 
@@ -27,7 +27,7 @@ XPATH_VIEW_MORE_BUTTON_EN = ("See all", "See fewer")
 CATEGORY_LINK_CLASS = "_3S09qsQh _30GXgBoj"
 
 
-def _get_categories(browser: Browser, url: str) -> bs4.ResultSet:
+def get_categories_prov(browser: Browser, url: str) -> bs4.ResultSet:
     driver = browser.driver
     driver.get(url)
 
@@ -41,7 +41,7 @@ def _get_categories(browser: Browser, url: str) -> bs4.ResultSet:
                 locator=(By.XPATH, XPATH_VIEW_MORE_BUTTON),
                 text_=XPATH_VIEW_MORE_BUTTON_EN[1]
             )
-            WebDriverWait(driver, 1).until(element_present)
+            WebDriverWait(driver, 2).until(element_present)
 
         except TimeoutException:
             driver.find_element_by_xpath(XPATH_VIEW_MORE_BUTTON).click()
@@ -65,8 +65,8 @@ def get_data_from_item(item, provincie: str) -> tuple:
 
 def get_categories(browser: Browser) -> list:
     """Return categorieën lijst."""
-    nh = (get_data_from_item(item, 'Noord-Holland') for item in _get_categories(browser, URL_NH))
-    fl = (get_data_from_item(item, 'Flevoland') for item in _get_categories(browser, URL_FL))
+    nh = (get_data_from_item(item, 'Noord-Holland') for item in get_categories_prov(browser, URL_NH))
+    fl = (get_data_from_item(item, 'Flevoland') for item in get_categories_prov(browser, URL_FL))
 
     return [item for item in chain(nh, fl)]
 

@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 from time import sleep
-from typing import Optional, List
+from typing import Optional, List, Union, Tuple
 from urllib.parse import urlparse
 
 import bs4
@@ -158,12 +158,14 @@ class Response:
     def create_soup(self):
         try:
             self.soup = bs4.BeautifulSoup(self._browser.driver.page_source, features='lxml')
+
         except TypeError:
             self.soup = None
 
     def add_wait_for_element(self, xpath_elem, time_out: int = 5):
         """Wait for element to appear on website (Silently fail)."""
         try:
+            wait_for_document_ready_state(self._browser)
             element_present = ec.presence_of_element_located((By.XPATH, xpath_elem))
             WebDriverWait(self._browser.driver, time_out).until(element_present)
 
@@ -208,9 +210,6 @@ class Response:
     def get_css_property(self, elem, prop, by=By.XPATH, pseudo: str = ''):
         driver = self._browser.driver
         return driver.execute_script(
-            "function encode_utf8(s) {"
-            "    return unescape(encodeURIComponent(s));"
-            "}"
             f"var prop = '{prop}';"
             f"var compsty = getComputedStyle(arguments[0], '{pseudo}');"
             f"return compsty.getPropertyValue(compsty[prop]);",
@@ -297,11 +296,19 @@ def hide_elements(elem: list, browser: Browser):
         print(e_)
 
 
-def scroll_into_view(element: tuple, browser: Browser):
+def scroll_into_view(element: Union[tuple, List[Tuple]], browser: Browser):
+    if isinstance(element, tuple):
+        element = [element]
+
+    wait_for_document_ready_state(browser)
     try:
-        browser.driver.execute_script(
-            "return arguments[0].scrollIntoView();",
-            browser.driver.find_element(*element)
-        )
+        for el in element:
+            browser.driver.execute_script(
+                "return arguments[0].scrollIntoView();",
+                browser.driver.find_element(*el)
+            )
+
+    except NoSuchElementException:
+        pass
     except JavascriptException as j:
         print(j)

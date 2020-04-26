@@ -14,7 +14,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
 
-from tripadvisor.browser import Browser, scroll_down, wait_for_document_ready_state
+from tripadvisor.browser import Browser, scroll_into_view
 
 BASE = 'http://www.tripadvisor.com'
 
@@ -108,12 +108,13 @@ def get_activities(category: tuple, browser: Browser) -> tuple:
     while True:
         page_counter += 1
 
-        scroll_down(browser)
+        # scroll_down(browser)
+        scroll_into_view(
+            [(By.XPATH, XPATH_NEXT_BUTTON_1), (By.XPATH, XPATH_NEXT_BUTTON_2), (By.XPATH, XPATH_BUTTON_DISABLED)],
+            browser
+        )
 
-        sleep(0.5)
-        soup = bs4.BeautifulSoup(driver.page_source, features='lxml')
-
-        data = get_links(soup, link)
+        data = get_links(bs4.BeautifulSoup(driver.page_source, features='lxml'), link)
 
         for i in data:
             yield i

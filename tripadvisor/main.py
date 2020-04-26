@@ -5,9 +5,9 @@ Main running class.
 @email: roel.de.vries@amsterdam.nl
 """
 import os
-import sys
 import pickle
 import signal
+import sys
 from datetime import datetime
 from typing import Tuple
 
@@ -89,7 +89,12 @@ def create_dataframe(cat_dump: str, act_dump: str, attrs_dump: str) -> Tuple[pd.
 
 def check_attr_url(url_: str):
     from urllib.parse import urlparse
-    return urlparse(url_).path
+    try:
+        parsed = urlparse(url_).path
+    except ValueError:
+        parsed = url_
+
+    return parsed
 
 
 def merge_(cats, acts, attrs):
@@ -244,6 +249,7 @@ def print_update(begin_, aantal, type_):
 
 def init_browser(base_url: str, headless_: bool):
     from scrape_2 import _wait_for
+
     chrome = Browser(base_url, headless=headless_)
 
     # klik op continue om op tripadvisor.com te blijven
@@ -286,13 +292,23 @@ def handle_sig_term(signum, frame):
     sys.exit(0)
 
 
+def lees_pickle(path: str):
+    with open(path, 'rb') as f:
+        q = pickle.load(f)
+
+    return q
+
+
 if __name__ == '__main__':
     # signal.signal(signal.SIGINT, handle_sig_term)
-    scrape = '--scrape' in sys.argv[1:]
-    headless = '--headless' in sys.argv[1:]
+    args = sys.argv[1:]
 
-    browser = None
-    categories, activities, attracties = [], [], []
+    scrape = '--scrape' in args
+    headless = '--headless' in args
+
+    categories = lees_pickle(args[args.index('--categories') + 1]) if '--categories' in args else []
+    activities = lees_pickle(args[args.index('--activities') + 1]) if '--activities' in args else []
+    attracties = lees_pickle(args[args.index('--attracties') + 1]) if '--attracties' in args else []
 
     begin = datetime.now()
     begin_fmt = begin.strftime('%d-%m-%Y %H%M')
@@ -303,28 +319,34 @@ if __name__ == '__main__':
     file_act = f'{output}/activities {begin_fmt}.pickle'
     file_att = f'{output}/attracties {begin_fmt}.pickle'
 
+    browser = None
+
     if scrape:
         try:
             browser = init_browser('http://www.tripadvisor.com', headless_=headless)
 
-            categories.extend(get_categories(browser))
+            if not categories and not activities and not activities:
+                categories.extend(get_categories(browser))
 
-            activities.extend(flatten(get_activities(cat, browser) for cat in categories))  # if cat[0] == 'Tours'
+            if categories and not activities and not attracties:
+                activities.extend(flatten(get_activities(cat, browser) for cat in categories))  # if cat[0] == 'Tours'
 
-            activ_links = {act[1] for act in activities}
-            attracties.extend(Attractie(act_link, headless).data for act_link in activ_links)
+            if not categories and activities and not attracties:
+                activ_links = {act[1] for act in activities}
+                attracties.extend(Attractie(act_link, headless).data for act_link in activ_links)
 
         except Exception as e:
-            print(e)
+            raise e
 
         finally:
             print("\n  -- FINALLY --  ")
+
             dump_to(file_cat, categories)
             dump_to(file_act, activities)
             dump_to(file_att, attracties)
 
-            if browser:
-                browser.kill()
+            browser.kill()
+            Browser(init=False).kill_existing_drivers()
 
             running_time(begin)
 

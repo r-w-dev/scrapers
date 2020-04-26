@@ -1,9 +1,10 @@
 shapely
 requests
 urllib3
-scrapy>=1.7
-pandas>=0.25
+scrapy>=2.1.0
+pandas>=1.0.3
 psutil
 sqlalchemy
 selenium
 beautifulsoup4
+more-itertools
