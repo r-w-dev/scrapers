@@ -55,6 +55,7 @@ def create_dataframe(cat_dump: str, act_dump: str, attrs_dump: str) -> Tuple[pd.
 
     df_acts = pd.DataFrame(acts, columns=[
         'titel',
+        'prijs',
         'attrac_url',
         'added',
         'status',
@@ -101,6 +102,8 @@ def merge_(cats, acts, attrs):
     if cats.empty or acts.empty or attrs.empty:
         return pd.DataFrame()
 
+    acts.drop(columns=['titel'], inplace=True)
+
     attrs = attrs.assign(**{'attrac_url': attrs['attrac_url'].apply(check_attr_url)})
     acts = acts.assign(**{'attrac_url': acts['attrac_url'].apply(check_attr_url)})
 
@@ -116,7 +119,7 @@ def merge_(cats, acts, attrs):
         .astype({'added': 'datetime64', 'categorie': 'category'}) \
 
     res['added'] = res['added'].apply(lambda x: x.strftime('%d-%m-%Y'))
-    res['rating'].mask(res['aantal_reviews'] == -1, -1, inplace=True)
+    res['beoordeling'].mask(res['aantal_reviews'] == -1, -1, inplace=True)
     return res
 
 
@@ -159,6 +162,7 @@ def pivot_categories(data: pd.DataFrame) -> pd.DataFrame:
         'percentage_average',
         'percentage_poor',
         'percentage_terrible',
+        'prijs',
         'lat',
         'lon'
     ]
@@ -175,8 +179,8 @@ def pivot_categories(data: pd.DataFrame) -> pd.DataFrame:
 
 def running_time(start):
     now = datetime.now()
-    print('\nrunning: {0:.0f} minute(s)...\n'.format(
-        round((now - start).total_seconds() / 60, 0)))
+    minutes = (now - start).total_seconds() / 60
+    print(f'\nrunning: {minutes:.0f} minute(s)...\n')
 
 
 def print_item(idx: int, links, ta_link: str):
@@ -186,6 +190,7 @@ def print_item(idx: int, links, ta_link: str):
 def _sqlcol(dfparam):
     from sqlalchemy import Numeric, Date, String, Integer
     dtypedict = {}
+
     for c, d in zip(dfparam.columns, dfparam.dtypes):
         if 'object' in str(d):
             dtypedict.update({c: String()})
@@ -331,8 +336,8 @@ if __name__ == '__main__':
             if categories and not activities and not attracties:
                 activities.extend(flatten(get_activities(cat, browser) for cat in categories))  # if cat[0] == 'Tours'
 
-            if not categories and activities and not attracties:
-                activ_links = {act[1] for act in activities}
+            if activities and not attracties:
+                activ_links = {act[2] for act in activities}
                 attracties.extend(Attractie(act_link, headless).data for act_link in activ_links)
 
         except Exception as e:
@@ -345,11 +350,12 @@ if __name__ == '__main__':
             dump_to(file_act, activities)
             dump_to(file_att, attracties)
 
-            browser.kill()
-            Browser(init=False).kill_existing_drivers()
+            if browser:
+                browser.kill()
 
             running_time(begin)
 
+    """
     df_cat, df_act, df_att = create_dataframe(file_cat, file_act, file_att)
 
     if not df_cat.empty and not df_act.empty and not df_att.empty:
@@ -364,3 +370,4 @@ if __name__ == '__main__':
         df_cat.to_pickle(f'{output}/df_cat_{begin_fmt}.pickle')
         df_act.to_pickle(f'{output}/df_act_{begin_fmt}.pickle')
         df_att.to_pickle(f'{output}/df_att_{begin_fmt}.pickle')
+    """

@@ -1,6 +1,6 @@
 import os
+import time
 from pathlib import Path
-from time import sleep
 from typing import Optional, List, Union, Tuple
 from urllib.parse import urlparse
 
@@ -40,8 +40,8 @@ class Browser:
             self.kill_existing_drivers()
             self._driver = self._init_chrome()
 
-        if url:
-            self._driver.get(url)
+            if url:
+                self.get(url, ignore_errors=True)
 
     @property
     def driver(self) -> Optional[WebDriver]:
@@ -49,7 +49,18 @@ class Browser:
 
     @property
     def running(self):
-        return self._driver is not None
+        if self._driver is None:
+            return False
+
+        from urllib3.exceptions import MaxRetryError
+        from selenium.common.exceptions import WebDriverException
+
+        try:
+            if self._driver.title:
+                return True
+
+        except (WebDriverException, MaxRetryError):
+            return False
 
     if os.name == 'nt':
         CHR_PATH = Path(r'C:\Users\Roel\PycharmProjects\scrapers\tripadvisor\driver\chromedriver.exe')
@@ -67,6 +78,8 @@ class Browser:
                 proc.terminate()
 
     def _init_chrome(self, adblock: bool = False, incognito: bool = False) -> Chrome:
+        empty_dir(str(Path.cwd() / 'chrome-data'))
+
         chr_opt = ChromeOptions()
 
         chr_opt.headless = self.headless
@@ -95,6 +108,20 @@ class Browser:
         print('\n ---  Browser started  --- \n')
         return chrome
 
+    def get(self, url: str, max_retry: int = 10, ignore_errors: bool = False):
+        counter = 0
+        print('getting url...', url, self.driver.current_url)
+
+        while self._driver.current_url != url and counter < max_retry:
+            self._driver.get(url)
+            wait_for_document_ready_state(self)
+
+            if ignore_errors:
+                break
+            else:
+                counter += 1
+                print('current url:', self._driver.current_url, f'({counter})')
+
     def restart(self):
         """Restart webdriver."""
         self.close()
@@ -109,9 +136,15 @@ class Browser:
         self._driver.close()
 
     def kill(self):
-        self.close()
-        self._driver.quit()
-        print('Driver and browser closed...')
+        if self.running:
+            self._driver.close()
+            self._driver.quit()
+            print('Driver and browser closed...')
+
+        else:
+            self.kill_existing_drivers()
+
+        self._driver = None
 
 
 class Response:
@@ -227,7 +260,7 @@ def wait_for_document_ready_state(browser, wait_for: str = None, time_out: float
         ready_state = browser.driver.execute_script("return document.readyState;")
 
         while ready_state == 'loading':
-            sleep(time_out)
+            time.sleep(time_out)
             ready_state = browser.driver.execute_script("return document.readyState;")
 
             if wait_for and ready_state == wait_for:
@@ -312,3 +345,9 @@ def scroll_into_view(element: Union[tuple, List[Tuple]], browser: Browser):
         pass
     except JavascriptException as j:
         print(j)
+
+
+def empty_dir(dir_: str):
+    import shutil
+    print('removing ', dir_)
+    shutil.rmtree(dir_)

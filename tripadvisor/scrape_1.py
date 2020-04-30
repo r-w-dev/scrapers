@@ -7,9 +7,10 @@ Scrape categorieën.
 import re
 from datetime import datetime as dt
 from itertools import chain
+from time import sleep
 
 import bs4
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
@@ -27,33 +28,35 @@ XPATH_VIEW_MORE_BUTTON_EN = ("See all", "See fewer")
 CATEGORY_LINK_CLASS = "_3S09qsQh _30GXgBoj"
 
 
-def get_categories_prov(browser: Browser, url: str) -> bs4.ResultSet:
-    driver = browser.driver
-    driver.get(url)
+def get_categories_prov(browser: Browser) -> bs4.ResultSet:
+    try:
+        scroll_into_view((By.XPATH, XPATH_VIEW_MORE_BUTTON), browser)
+        hide_elements(["sbx_banner"], browser)
 
-    hide_elements(["sbx_banner"], browser)
+        browser.driver.find_element_by_xpath(XPATH_VIEW_MORE_BUTTON).click()
 
-    scroll_into_view((By.XPATH, XPATH_VIEW_MORE_BUTTON), browser)
+        element_present = ec.text_to_be_present_in_element(
+            locator=(By.XPATH, XPATH_VIEW_MORE_BUTTON),
+            text_=XPATH_VIEW_MORE_BUTTON_EN[1]
+        )
+        WebDriverWait(browser.driver, 2).until(element_present)
 
-    while True:
-        try:
-            element_present = ec.text_to_be_present_in_element(
-                locator=(By.XPATH, XPATH_VIEW_MORE_BUTTON),
-                text_=XPATH_VIEW_MORE_BUTTON_EN[1]
-            )
-            WebDriverWait(driver, 2).until(element_present)
+    except TimeoutException as t:
+        raise t
+    except NoSuchElementException as e:
+        raise e
 
-        except TimeoutException:
-            driver.find_element_by_xpath(XPATH_VIEW_MORE_BUTTON).click()
+    else:
+        cat = bs4.BeautifulSoup(
+            browser.driver.page_source,
+            features='lxml'
+        ).find_all('a', {'class': CATEGORY_LINK_CLASS})
 
-        else:
-            cat = bs4.BeautifulSoup(driver.page_source, features='lxml').find_all('a', {'class': CATEGORY_LINK_CLASS})
-            break
-
+    sleep(2)
     return cat
 
 
-def get_data_from_item(item, provincie: str) -> tuple:
+def get_data_from_item(item: bs4.Tag, provincie: str) -> tuple:
     return (
         re.sub(r'[^a-zA-Z &]', '', item.get_text(strip=True)).strip(),
         item['href'],  # link to activities
@@ -65,8 +68,11 @@ def get_data_from_item(item, provincie: str) -> tuple:
 
 def get_categories(browser: Browser) -> list:
     """Return categorieën lijst."""
-    nh = (get_data_from_item(item, 'Noord-Holland') for item in get_categories_prov(browser, URL_NH))
-    fl = (get_data_from_item(item, 'Flevoland') for item in get_categories_prov(browser, URL_FL))
+    browser.get(URL_NH)
+    nh = (get_data_from_item(item, 'Noord-Holland') for item in get_categories_prov(browser))
+
+    browser.get(URL_FL)
+    fl = (get_data_from_item(item, 'Flevoland') for item in get_categories_prov(browser))
 
     return [item for item in chain(nh, fl)]
 

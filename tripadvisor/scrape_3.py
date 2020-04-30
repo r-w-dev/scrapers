@@ -237,8 +237,7 @@ class Attractie:
         except (TypeError, AttributeError):
             return {}
 
-        else:
-            return value
+        return value
 
     def find_title(self):
         title = self.find_details_in_script_header('name')
