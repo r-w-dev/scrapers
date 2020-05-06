@@ -9,6 +9,7 @@ import pickle
 import signal
 import sys
 from datetime import datetime
+from pathlib import Path
 from typing import Tuple
 
 import pandas as pd
@@ -147,6 +148,7 @@ def pivot_categories(data: pd.DataFrame) -> pd.DataFrame:
         'provincie',
         'attrac_url',
         'status',
+        'ta_id',
         'titel',
         'beoordeling',
         'adres',
@@ -252,16 +254,37 @@ def print_update(begin_, aantal, type_):
     print(aantal, type_)
 
 
-def init_browser(base_url: str, headless_: bool):
-    from scrape_2 import _wait_for
+def init_browser(base_url: str, head_less: bool):
+    if os.name == 'nt':
+        driver_path = Path(r'C:\Users\Roel\PycharmProjects\scrapers\tripadvisor\driver\chromedriver.exe')
+    else:
+        # CHR_PATH = Path().home() / 'chromedriver' / 'chromedriver'
+        driver_path = '/home/vries274/scrapers/tripadvisor/chromedriver/chromedriver'
 
-    chrome = Browser(base_url, headless=headless_)
+    arguments = [
+        "--no-sandbox",
+        'log-level=2',
+        '--disable-logging',
+        '--disable-remote-fonts',
+        "--remote-debugging-port=9222",
+        "--disable-infobars",
+        "--disable-dev-shm-usage",
+        "--ignore-certificate-errors",
+        "--disable-gpu"
+    ]
+    chrome = Browser(
+        headless=head_less,
+        driver_path=driver_path,
+        userdata_path='chrome-data',
+        arguments=arguments
+    )
+    chrome.get(base_url)
 
     # klik op continue om op tripadvisor.com te blijven
     try:
         cont = "//span[@class='continue']"
-        _wait_for(chrome.driver, cont)
-        chrome.driver.find_element_by_xpath(cont).click()
+        chrome.add_wait_for_element(('xpath', cont))
+        chrome.find_element_by_xpath(cont).click()
 
     except NoSuchElementException:
         print("Continue niet gevonden. (al op tripadvisor.com)")
